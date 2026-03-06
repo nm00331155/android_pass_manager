@@ -3,6 +3,7 @@ package com.securevault.app.data.db.dao
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.securevault.app.data.db.entity.CredentialEntity
@@ -45,6 +46,10 @@ interface CredentialDao {
     /** 認証情報を新規追加する。 */
     @Insert
     suspend fun insert(credential: CredentialEntity): Long
+
+    /** 認証情報をバッチ保存する。 */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<CredentialEntity>)
 
     /** 認証情報を更新する。 */
     @Update

@@ -121,7 +121,7 @@ enum class ImportSource(
         )
     ),
     SECUREVAULT(
-        displayName = "SecureVault CSV",
+        displayName = "KeyPass CSV",
         fileExtension = "csv",
         columnMapping = CsvColumnMapping(
             serviceName = "serviceName",

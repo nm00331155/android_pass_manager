@@ -72,6 +72,20 @@ class CredentialRepositoryImpl @Inject constructor(
         }
     }
 
+    /** 認証情報をバッチ保存する。 */
+    override suspend fun saveAll(credentials: List<Credential>) {
+        if (credentials.isEmpty()) {
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val entities = credentials.map { credential ->
+            val createdAt = if (credential.id == 0L) now else credential.createdAt
+            credential.toEntity(createdAt = createdAt, updatedAt = now)
+        }
+        credentialDao.insertAll(entities)
+    }
+
     /** ID 指定で削除する。 */
     override suspend fun delete(id: Long) {
         credentialDao.deleteById(id)
@@ -140,7 +154,7 @@ class CredentialRepositoryImpl @Inject constructor(
                 isFavorite = isFavorite
             )
         }.onFailure { throwable ->
-            Log.w(TAG, "Credential decode failed for id=$id", throwable)
+            Log.e(TAG, "Credential decode FAILED for id=$id, serviceName=$serviceName", throwable)
         }.getOrNull()
     }
 

@@ -110,4 +110,30 @@ class BackupCryptoTest {
 
         assertArrayEquals(key1.encoded, key2.encoded)
     }
+
+    /**
+     * 異なるソルトから異なる鍵が導出されることを検証する。
+     */
+    @Test
+    fun `different salts produce different keys`() {
+        val key1 = BackupCrypto.deriveKey("same-password", BackupCrypto.generateSalt())
+        val key2 = BackupCrypto.deriveKey("same-password", BackupCrypto.generateSalt())
+
+        assertFalse(key1.encoded.contentEquals(key2.encoded))
+    }
+
+    /**
+     * 同じ平文でも毎回異なるIVで暗号化されることを検証する。
+     */
+    @Test
+    fun `encryption uses unique IV each time`() {
+        val key = BackupCrypto.deriveKey("pwd", BackupCrypto.generateSalt())
+        val plainBytes = "same data".toByteArray(Charsets.UTF_8)
+
+        val (cipher1, iv1) = BackupCrypto.encrypt(plainBytes, key)
+        val (cipher2, iv2) = BackupCrypto.encrypt(plainBytes, key)
+
+        assertFalse(iv1.contentEquals(iv2))
+        assertFalse(cipher1.contentEquals(cipher2))
+    }
 }

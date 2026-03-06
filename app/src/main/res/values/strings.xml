@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">KeyPass</string>
-    <string name="autofill_service_name">SecureVault 自動入力</string>
+    <string name="autofill_service_name">KeyPass 自動入力</string>
 
     <!-- 認証画面 -->
     <string name="auth_title">認証が必要です</string>
@@ -15,12 +15,12 @@
     <string name="auth_retry">再試行</string>
 
     <!-- 自動入力 -->
-    <string name="autofill_auth_title">SecureVault のロックを解除</string>
+    <string name="autofill_auth_title">KeyPass のロックを解除</string>
     <string name="autofill_auth_subtitle">保存済みの認証情報を入力するには認証が必要です</string>
     <string name="autofill_save_channel_name">自動入力の保存</string>
     <string name="autofill_save_channel_description">自動入力で認証情報を保存したときに表示される通知です。</string>
     <string name="autofill_save_notification_title">認証情報を保存しました</string>
-    <string name="autofill_save_notification_message">%1$s を SecureVault に保存しました</string>
+    <string name="autofill_save_notification_message">%1$s を KeyPass に保存しました</string>
 
     <!-- ホーム画面 -->
     <string name="home_title">パスワード一覧</string>
@@ -144,7 +144,7 @@
     <string name="backup_export_csv_warning">パスワードが平文で保存されます。&#10;信頼できる場所にのみ保存してください。&#10;&#10;本当にエクスポートしますか？</string>
     <string name="backup_import_section">インポート</string>
     <string name="backup_import_encrypted">暗号化バックアップから復元</string>
-    <string name="backup_import_csv">CSV からインポート（SecureVault 形式）</string>
+    <string name="backup_import_csv">CSV からインポート（KeyPass 形式）</string>
     <string name="backup_import_service">他のサービスからインポート</string>
     <string name="backup_import_service_title">インポート元を選択</string>
     <string name="backup_import_service_hint">設定 -> パスワードマネージャー -> エクスポートで取得した CSV を選択してください</string>

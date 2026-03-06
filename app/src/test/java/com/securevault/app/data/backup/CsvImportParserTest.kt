@@ -2,6 +2,7 @@ package com.securevault.app.data.backup
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
@@ -270,5 +271,140 @@ class CsvImportParserTest {
         assertEquals("pass1", result[0].password)
         assertEquals("メモ", result[0].notes)
         assertEquals("other", result[0].category)
+    }
+
+    @Test
+    fun `parse Chrome CSV with standard headers`() {
+        val csv = "name,url,username,password,note\nGitHub,https://github.com,user1,pass123,my note"
+
+        val result = parser.parse(csv, ImportSource.CHROME)
+
+        assertEquals(1, result.size)
+        assertEquals("GitHub", result[0].serviceName)
+        assertEquals("https://github.com", result[0].serviceUrl)
+        assertEquals("user1", result[0].username)
+        assertEquals("pass123", result[0].password)
+        assertEquals("my note", result[0].notes)
+    }
+
+    @Test
+    fun `parse Chrome CSV multiple rows`() {
+        val csv = """name,url,username,password,note
+GitHub,https://github.com,user1,pass1,
+Google,https://google.com,user2,pass2,memo
+Amazon,https://amazon.co.jp,user3,pass3,
+""".trimIndent()
+
+        val result = parser.parse(csv, ImportSource.CHROME)
+
+        assertEquals(3, result.size)
+    }
+
+    @Test
+    fun `parse CSV with UTF-8 BOM`() {
+        val csv = "\uFEFFname,url,username,password,note\nTest,https://test.com,u,p,n"
+
+        val result = parser.parse(csv, ImportSource.CHROME)
+
+        assertEquals(1, result.size)
+        assertEquals("Test", result[0].serviceName)
+    }
+
+    @Test
+    fun `parse CSV with escaped quotes`() {
+        val csv = "name,url,username,password,note\n\"He said \"\"hello\"\"\",https://a.com,u,p,"
+
+        val result = parser.parse(csv, ImportSource.CHROME)
+
+        assertEquals(1, result.size)
+        assertEquals("He said \"hello\"", result[0].serviceName)
+    }
+
+    @Test
+    fun `return empty list for empty CSV`() {
+        val result = parser.parse("", ImportSource.CHROME)
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `return empty list for header only CSV`() {
+        val result = parser.parse("name,url,username,password,note\n", ImportSource.CHROME)
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `parse Edge CSV same format as Chrome`() {
+        val csv = "name,url,username,password,note\nEdgeSvc,https://edge.com,euser,epass,enote"
+
+        val result = parser.parse(csv, ImportSource.EDGE)
+
+        assertEquals(1, result.size)
+        assertEquals("EdgeSvc", result[0].serviceName)
+    }
+
+    @Test
+    fun `parse with mixed case headers`() {
+        val csv = "Name,Url,UserName,Password,Note\nSvc,https://a.com,u,p,n"
+
+        val result = parser.parse(csv, ImportSource.CHROME)
+
+        assertEquals(1, result.size)
+        assertEquals("Svc", result[0].serviceName)
+    }
+
+    @Test
+    fun `parse 100 rows`() {
+        val header = "name,url,username,password,note"
+        val rows = (1..100).joinToString("\n") { index ->
+            "svc$index,https://svc$index.com,user$index,pass$index,note$index"
+        }
+        val csv = "$header\n$rows"
+
+        val result = parser.parse(csv, ImportSource.CHROME)
+
+        assertEquals(100, result.size)
+    }
+
+    @Test
+    fun `fallback to URL host when name is empty`() {
+        val csv = "name,url,username,password,note\n,https://example.com/login,u,p,"
+
+        val result = parser.parse(csv, ImportSource.CHROME)
+
+        assertEquals(1, result.size)
+        assertEquals("example.com", result[0].serviceName)
+    }
+
+    @Test
+    fun `fallback to unknown when both name and url are empty`() {
+        val csv = "name,url,username,password,note\n,,u,p,"
+
+        val result = parser.parse(csv, ImportSource.CHROME)
+
+        assertEquals(1, result.size)
+        assertEquals("unknown", result[0].serviceName)
+    }
+
+    @Test
+    fun `parseCsvLine handles simple line`() {
+        val fields = parser.parseCsvLine("a,b,c")
+        assertEquals(listOf("a", "b", "c"), fields)
+    }
+
+    @Test
+    fun `parseCsvLine handles quoted fields`() {
+        val fields = parser.parseCsvLine("\"hello, world\",b,\"c\"\"d\"")
+
+        assertEquals("hello, world", fields[0])
+        assertEquals("b", fields[1])
+        assertEquals("c\"d", fields[2])
+    }
+
+    @Test
+    fun `parseCsvLine handles empty fields`() {
+        val fields = parser.parseCsvLine(",,")
+
+        assertEquals(3, fields.size)
+        assertTrue(fields.all { it.isEmpty() })
     }
 }

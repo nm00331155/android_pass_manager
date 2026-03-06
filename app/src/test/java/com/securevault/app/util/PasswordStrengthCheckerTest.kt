@@ -28,12 +28,30 @@ class PasswordStrengthCheckerTest {
     }
 
     /**
+     * 1文字パスワードが VERY_WEAK と判定されることを検証する。
+     */
+    @Test
+    fun `single char password returns VERY_WEAK`() {
+        val result = PasswordStrengthChecker.check("a")
+        assertEquals(PasswordStrength.VERY_WEAK, result)
+    }
+
+    /**
      * ブラックリスト単語を含むパスワードが WEAK と判定されることを検証する。
      */
     @Test
     fun `blacklisted word password returns WEAK`() {
         val result = PasswordStrengthChecker.check("password")
         assertEquals(PasswordStrength.WEAK, result)
+    }
+
+    /**
+     * 代表的な弱いパスワードが WEAK 以下になることを検証する。
+     */
+    @Test
+    fun `common numeric password is weak or below`() {
+        val result = PasswordStrengthChecker.check("123456")
+        assertTrue(result == PasswordStrength.WEAK || result == PasswordStrength.VERY_WEAK)
     }
 
     /**
@@ -78,5 +96,14 @@ class PasswordStrengthCheckerTest {
                 result == PasswordStrength.MEDIUM ||
                 result == PasswordStrength.VERY_WEAK
         )
+    }
+
+    /**
+     * Unicode を含むパスワードでも評価処理がクラッシュしないことを検証する。
+     */
+    @Test
+    fun `unicode password is evaluated without crash`() {
+        val result = PasswordStrengthChecker.check("パスワード123!")
+        assertTrue(result in PasswordStrength.entries)
     }
 }

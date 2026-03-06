@@ -51,6 +51,7 @@ class BackupManagerTest {
         assertTrue(backup.isFavorite)
         assertEquals(1700000000000L, backup.createdAt)
         assertEquals(1700001000000L, backup.updatedAt)
+        assertFalse(serializedBackup.contains("\"id\""))
         assertFalse(serializedBackup.contains("packageName"))
     }
 
@@ -204,5 +205,24 @@ class BackupManagerTest {
         assertEquals("Test", deserialized.serviceName)
         assertEquals("user", deserialized.username)
         assertEquals("pass", deserialized.password)
+    }
+
+    /**
+     * 特殊文字を含む値でも JSON 往復できることを検証する。
+     */
+    @Test
+    fun `JSON roundtrip preserves special characters`() {
+        val original = BackupCredential(
+            serviceName = "Svc with \"quotes\" & <angles>",
+            serviceUrl = "https://svc.example.com/path?x=1&y=2",
+            username = "user@email.com",
+            password = "p@ss\$w0rd!#%",
+            notes = "メモ（日本語）"
+        )
+
+        val jsonString = json.encodeToString(original)
+        val restored: BackupCredential = json.decodeFromString(jsonString)
+
+        assertEquals(original, restored)
     }
 }

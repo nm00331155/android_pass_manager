@@ -76,7 +76,7 @@ fun AuthScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "SecureVault",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.headlineMedium
             )
             Text(

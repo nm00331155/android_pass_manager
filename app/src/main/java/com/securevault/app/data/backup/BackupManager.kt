@@ -3,7 +3,9 @@ package com.securevault.app.data.backup
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import com.securevault.app.data.repository.CredentialRepository
+import com.securevault.app.data.repository.model.Credential
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -150,20 +152,34 @@ class BackupManager @Inject constructor(
         backupList: List<BackupCredential>,
         strategy: ImportStrategy
     ): Int {
-        var importCount = 0
-        val existingCredentials = credentialRepository.getAll().first().toMutableList()
+        if (backupList.isEmpty()) {
+            return 0
+        }
+
+        val existingCredentials = credentialRepository.getAll().first()
+        val existingMap = existingCredentials.groupBy { keyOf(it.serviceName, it.username) }
+
+        val toInsert = mutableListOf<Credential>()
+        val pendingInsertByKey = linkedMapOf<String, Credential>()
+        val pendingUpdateById = linkedMapOf<Long, Credential>()
 
         for (backup in backupList) {
-            val existing = existingCredentials.find { candidate ->
-                candidate.serviceName == backup.serviceName && candidate.username == backup.username
-            }
+            val key = keyOf(backup.serviceName, backup.username)
+            val existing = existingMap[key]?.firstOrNull()
+            val candidate = backup.toCredential()
 
             when {
                 existing == null -> {
-                    val newCredential = backup.toCredential()
-                    credentialRepository.save(newCredential)
-                    existingCredentials.add(newCredential)
-                    importCount++
+                    when (strategy) {
+                        ImportStrategy.IMPORT_ALL -> toInsert.add(candidate)
+                        ImportStrategy.SKIP_DUPLICATES -> {
+                            pendingInsertByKey.putIfAbsent(key, candidate)
+                        }
+
+                        ImportStrategy.OVERWRITE -> {
+                            pendingInsertByKey[key] = candidate
+                        }
+                    }
                 }
 
                 strategy == ImportStrategy.SKIP_DUPLICATES -> {
@@ -171,27 +187,35 @@ class BackupManager @Inject constructor(
                 }
 
                 strategy == ImportStrategy.OVERWRITE -> {
-                    val updated = backup.toCredential().copy(
+                    pendingUpdateById[existing.id] = candidate.copy(
                         id = existing.id,
                         packageName = existing.packageName,
                         updatedAt = System.currentTimeMillis()
                     )
-                    credentialRepository.save(updated)
-                    existingCredentials.removeAll { it.id == existing.id }
-                    existingCredentials.add(updated)
-                    importCount++
                 }
 
                 strategy == ImportStrategy.IMPORT_ALL -> {
-                    val newCredential = backup.toCredential()
-                    credentialRepository.save(newCredential)
-                    existingCredentials.add(newCredential)
-                    importCount++
+                    toInsert.add(candidate)
                 }
             }
         }
 
-        return importCount
+        toInsert.addAll(pendingInsertByKey.values)
+
+        if (toInsert.isNotEmpty()) {
+            credentialRepository.saveAll(toInsert)
+        }
+
+        for (update in pendingUpdateById.values) {
+            credentialRepository.save(update)
+        }
+
+        Log.d(TAG, "Import completed: inserted=${toInsert.size}, updated=${pendingUpdateById.size}")
+        return toInsert.size + pendingUpdateById.size
+    }
+
+    private fun keyOf(serviceName: String, username: String): String {
+        return "$serviceName||$username"
     }
 
     private fun readTextFromUri(inputUri: Uri): String {
@@ -226,3 +250,5 @@ enum class ImportStrategy {
     /** 重複に関係なくすべて追加する。 */
     IMPORT_ALL
 }
+
+private const val TAG = "BackupManager"

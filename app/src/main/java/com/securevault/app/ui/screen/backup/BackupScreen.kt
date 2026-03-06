@@ -3,6 +3,10 @@ package com.securevault.app.ui.screen.backup
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -86,6 +90,7 @@ fun BackupScreen(
     val importSuccessFormat = stringResource(R.string.backup_import_success)
     val errorFormat = stringResource(R.string.backup_error)
     val invalidImportFormat = stringResource(R.string.backup_import_invalid_format)
+    val blockerInteractionSource = remember { MutableInteractionSource() }
 
     val encryptedExportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -166,79 +171,97 @@ fun BackupScreen(
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (uiState is BackupUiState.InProgress) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.backup_export_section),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Button(
+                    onClick = { encryptedExportLauncher.launch("securevault_backup.securevault") },
+                    enabled = uiState !is BackupUiState.InProgress,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(stringResource(R.string.backup_in_progress))
+                    Text(stringResource(R.string.backup_export_encrypted))
+                }
+
+                OutlinedButton(
+                    onClick = { showCsvWarningDialog = true },
+                    enabled = uiState !is BackupUiState.InProgress,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.backup_export_csv))
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = stringResource(R.string.backup_import_section),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Button(
+                    onClick = { encryptedImportLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
+                    enabled = uiState !is BackupUiState.InProgress,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.backup_import_encrypted))
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        csvImportLauncher.launch(
+                            arrayOf("text/csv", "text/comma-separated-values", "*/*")
+                        )
+                    },
+                    enabled = uiState !is BackupUiState.InProgress,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.backup_import_csv))
+                }
+
+                OutlinedButton(
+                    onClick = { showServiceSourceDialog = true },
+                    enabled = uiState !is BackupUiState.InProgress,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.backup_import_service))
                 }
             }
 
-            Text(
-                text = stringResource(R.string.backup_export_section),
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            Button(
-                onClick = { encryptedExportLauncher.launch("securevault_backup.securevault") },
-                enabled = uiState !is BackupUiState.InProgress,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.backup_export_encrypted))
-            }
-
-            OutlinedButton(
-                onClick = { showCsvWarningDialog = true },
-                enabled = uiState !is BackupUiState.InProgress,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.backup_export_csv))
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = stringResource(R.string.backup_import_section),
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            Button(
-                onClick = { encryptedImportLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
-                enabled = uiState !is BackupUiState.InProgress,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.backup_import_encrypted))
-            }
-
-            OutlinedButton(
-                onClick = {
-                    csvImportLauncher.launch(
-                        arrayOf("text/csv", "text/comma-separated-values", "*/*")
-                    )
-                },
-                enabled = uiState !is BackupUiState.InProgress,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.backup_import_csv))
-            }
-
-            OutlinedButton(
-                onClick = { showServiceSourceDialog = true },
-                enabled = uiState !is BackupUiState.InProgress,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.backup_import_service))
+            if (uiState is BackupUiState.InProgress) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f))
+                        .clickable(
+                            interactionSource = blockerInteractionSource,
+                            indication = null,
+                            onClick = {}
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.backup_in_progress),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
             }
         }
     }

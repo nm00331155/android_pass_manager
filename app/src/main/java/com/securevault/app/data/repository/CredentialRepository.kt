@@ -35,6 +35,9 @@ interface CredentialRepository {
     /** 新規保存または更新する。 */
     suspend fun save(credential: Credential)
 
+    /** 認証情報をまとめて保存する。 */
+    suspend fun saveAll(credentials: List<Credential>)
+
     /** ID 指定で削除する。 */
     suspend fun delete(id: Long)
 
