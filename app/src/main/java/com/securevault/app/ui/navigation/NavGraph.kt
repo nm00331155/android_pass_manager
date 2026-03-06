@@ -61,11 +61,10 @@ fun SecureVaultNavGraph(
         composable(
             route = NavRoutes.AddEditPattern,
             arguments = listOf(navArgument("credentialId") { type = NavType.LongType })
-        ) { backStackEntry ->
-            val id = backStackEntry.arguments?.getLong("credentialId") ?: -1L
+        ) {
             AddEditScreen(
-                credentialId = id,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onGeneratorClick = { navController.navigate(NavRoutes.Generator) }
             )
         }
 
@@ -73,11 +72,11 @@ fun SecureVaultNavGraph(
             route = NavRoutes.DetailPattern,
             arguments = listOf(navArgument("credentialId") { type = NavType.LongType })
         ) { backStackEntry ->
-            val id = backStackEntry.arguments?.getLong("credentialId") ?: -1L
             DetailScreen(
-                credentialId = id,
                 onNavigateBack = { navController.popBackStack() },
-                onEditClick = { navController.navigate(NavRoutes.addEdit(id)) }
+                onEditClick = { id ->
+                    navController.navigate(NavRoutes.addEdit(id))
+                }
             )
         }
 
@@ -86,7 +85,15 @@ fun SecureVaultNavGraph(
         }
 
         composable(NavRoutes.Generator) {
-            PasswordGeneratorScreen(onNavigateBack = { navController.popBackStack() })
+            PasswordGeneratorScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onUsePassword = { generatedPassword ->
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("generated_password", generatedPassword)
+                    navController.popBackStack()
+                }
+            )
         }
     }
 }

@@ -1,6 +1,6 @@
 # SecureVault 仕様書
 
-最終更新: 2026-03-06 13:08:58 +09:00
+最終更新: 2026-03-06 14:08:27 +09:00
 
 ## 1. アプリ概要
 - アプリ名: SecureVault（Android パスワードマネージャー）
@@ -67,16 +67,26 @@
 
 ## 9. 実装状況（スナップショット）
 - Phase 0: 完了
-- Phase 1: 進行中
+- Phase 1: 完了
   - 実装済み: `MasterKeyManager`, `CryptoEngine`, `BiometricAuthManager`, `AutoLockManager`
   - 実装済み: `AuthScreen` 認証連携、`NavGraph` ロック時遷移ガード
+  - 実装済み: 設定画面からの自動ロック秒数変更連携、認証失敗UXリトライ導線
   - 実装済み: `CryptoEngineTest`（1件、成功）
-  - 未完了: 設定画面からの自動ロック秒数変更連携、詳細な認証失敗UX調整
 - Phase 2: 完了
   - 実装済み: `CredentialEntity`, `CredentialDao`, `SecureVaultDatabase`
   - 実装済み: `DbKeyManager` による DB パスフレーズ管理
   - 実装済み: `CredentialRepository` / `CredentialRepositoryImpl`
   - 実装済み: `DatabaseModule`（Room + SQLCipher + Repository DI）
+- Phase 3: 完了
+  - 実装済み: `HomeScreen` 一覧/検索/フィルタ/スワイプ操作
+  - 実装済み: `AddEditScreen` + `AddEditViewModel`（保存/編集/カテゴリ/強度表示）
+  - 実装済み: `DetailScreen` + `DetailViewModel`（コピー/削除/表示切替）
+  - 実装済み: `PasswordGeneratorScreen` + `PasswordGeneratorViewModel`
+  - 実装済み: `SettingsScreen` + `SettingsViewModel`（自動ロック/クリップボード設定、全件削除）
+  - 実装済み: `NavGraph` の生成パスワード受け渡し導線
+- Phase 4: 進行中
+  - 実装済み: `SecureVaultAutofillService` の Repository 連携と FillResponse 生成
+  - 未完了: `onSaveRequest` の保存実装、Autofill認証連携、検出精度向上
 
 ## 10. 開発運用ルール（ストレージ）
 - 一時データと作業用キャッシュは `D:\temp` を優先使用する。

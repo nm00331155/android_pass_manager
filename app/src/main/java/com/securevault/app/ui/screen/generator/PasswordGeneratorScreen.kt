@@ -5,10 +5,12 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -18,35 +20,41 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import java.security.SecureRandom
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.securevault.app.R
+import com.securevault.app.ui.component.PasswordStrengthBar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PasswordGeneratorScreen(onNavigateBack: () -> Unit) {
+fun PasswordGeneratorScreen(
+    onNavigateBack: () -> Unit,
+    onUsePassword: (String) -> Unit,
+    viewModel: PasswordGeneratorViewModel = hiltViewModel()
+) {
     val context = LocalContext.current
 
-    var length by remember { mutableStateOf(16f) }
-    var useLower by remember { mutableStateOf(true) }
-    var useUpper by remember { mutableStateOf(true) }
-    var useDigits by remember { mutableStateOf(true) }
-    var useSymbols by remember { mutableStateOf(true) }
-    var password by remember {
-        mutableStateOf(generatePassword(length = length.toInt(), true, true, true, true))
-    }
+    val length by viewModel.length.collectAsStateWithLifecycle()
+    val useLowercase by viewModel.useLowercase.collectAsStateWithLifecycle()
+    val useUppercase by viewModel.useUppercase.collectAsStateWithLifecycle()
+    val useDigits by viewModel.useDigits.collectAsStateWithLifecycle()
+    val useSymbols by viewModel.useSymbols.collectAsStateWithLifecycle()
+    val excludeAmbiguous by viewModel.excludeAmbiguous.collectAsStateWithLifecycle()
+    val generatedPassword by viewModel.generatedPassword.collectAsStateWithLifecycle()
+    val strength by viewModel.strength.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(text = "パスワード生成") },
+                title = { Text(text = stringResource(R.string.generator_title)) },
                 navigationIcon = {
                     TextButton(onClick = onNavigateBack) {
-                        Text(text = "戻る")
+                        Text(text = stringResource(R.string.back_label))
                     }
                 }
             )
@@ -59,87 +67,101 @@ fun PasswordGeneratorScreen(onNavigateBack: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(text = password)
-            Text(text = "長さ: ${length.toInt()}")
+            Text(
+                text = generatedPassword,
+                modifier = Modifier.fillMaxWidth(),
+                fontFamily = FontFamily.Monospace
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = viewModel::generate,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = stringResource(R.string.regenerate_action))
+                }
+                Button(
+                    onClick = {
+                        val clipboardManager =
+                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboardManager.setPrimaryClip(
+                            ClipData.newPlainText("generated_password", generatedPassword)
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = stringResource(R.string.copy_action))
+                }
+            }
+
+            Text(text = stringResource(R.string.password_length_label, length))
             Slider(
-                value = length,
-                onValueChange = { length = it },
+                value = length.toFloat(),
+                onValueChange = { value ->
+                    viewModel.updateLength(value.toInt())
+                },
                 valueRange = 8f..64f,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            ToggleRow(label = "小文字", checked = useLower) { useLower = it }
-            ToggleRow(label = "大文字", checked = useUpper) { useUpper = it }
-            ToggleRow(label = "数字", checked = useDigits) { useDigits = it }
-            ToggleRow(label = "記号", checked = useSymbols) { useSymbols = it }
+            GeneratorSwitchRow(
+                label = stringResource(R.string.option_lowercase),
+                checked = useLowercase,
+                onCheckedChange = viewModel::updateUseLowercase
+            )
+            GeneratorSwitchRow(
+                label = stringResource(R.string.option_uppercase),
+                checked = useUppercase,
+                onCheckedChange = viewModel::updateUseUppercase
+            )
+            GeneratorSwitchRow(
+                label = stringResource(R.string.option_digits),
+                checked = useDigits,
+                onCheckedChange = viewModel::updateUseDigits
+            )
+            GeneratorSwitchRow(
+                label = stringResource(R.string.option_symbols),
+                checked = useSymbols,
+                onCheckedChange = viewModel::updateUseSymbols
+            )
 
-            Button(
-                onClick = {
-                    password = generatePassword(
-                        length = length.toInt(),
-                        useLower = useLower,
-                        useUpper = useUpper,
-                        useDigits = useDigits,
-                        useSymbols = useSymbols
-                    )
-                },
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(text = "再生成")
+                Text(text = stringResource(R.string.exclude_ambiguous))
+                Checkbox(
+                    checked = excludeAmbiguous,
+                    onCheckedChange = viewModel::updateExcludeAmbiguous
+                )
             }
 
+            PasswordStrengthBar(strength = strength)
+
             Button(
-                onClick = {
-                    val clipboardManager =
-                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboardManager.setPrimaryClip(
-                        ClipData.newPlainText("generated_password", password)
-                    )
-                },
+                onClick = { onUsePassword(generatedPassword) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(text = "コピー")
-            }
-
-            Button(onClick = onNavigateBack, modifier = Modifier.fillMaxWidth()) {
-                Text(text = "ホームへ戻る")
+                Text(text = stringResource(R.string.use_generated_password))
             }
         }
     }
 }
 
 @Composable
-private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    androidx.compose.foundation.layout.Row(
+private fun GeneratorSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = label)
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
-}
-
-private fun generatePassword(
-    length: Int,
-    useLower: Boolean,
-    useUpper: Boolean,
-    useDigits: Boolean,
-    useSymbols: Boolean
-): String {
-    val lower = "abcdefghijklmnopqrstuvwxyz"
-    val upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    val digits = "0123456789"
-    val symbols = "!@#$%^&*()-_=+[]{}:;,.?"
-
-    val pool = buildString {
-        if (useLower) append(lower)
-        if (useUpper) append(upper)
-        if (useDigits) append(digits)
-        if (useSymbols) append(symbols)
-    }.ifBlank { lower + upper + digits }
-
-    val random = SecureRandom()
-    return (1..length)
-        .map { pool[random.nextInt(pool.length)] }
-        .joinToString(separator = "")
 }

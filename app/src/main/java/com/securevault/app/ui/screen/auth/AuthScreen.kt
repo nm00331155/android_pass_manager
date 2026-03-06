@@ -10,6 +10,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,7 +38,8 @@ fun AuthScreen(
     var shouldReveal by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = remember(context) { context.findFragmentActivity() }
-    val authAvailable = remember(context) { viewModel.isAuthAvailable(context) }
+    val authAvailability = remember(context) { viewModel.getAuthAvailability(context) }
+    val authAvailable = authAvailability.isAvailable
 
     val authState by viewModel.authState.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
@@ -47,6 +49,7 @@ fun AuthScreen(
     val authUnavailableMessage = stringResource(R.string.auth_unavailable)
     val authFallbackMessage = stringResource(R.string.auth_fallback)
     val authActivityMissingMessage = stringResource(R.string.auth_activity_not_found)
+    val authRetryMessage = stringResource(R.string.auth_retry)
     val authButtonText = if (authState is AuthUiState.Authenticating) {
         stringResource(R.string.auth_button_progress)
     } else {
@@ -112,7 +115,7 @@ fun AuthScreen(
 
             if (!authAvailable) {
                 Text(
-                    text = authUnavailableMessage,
+                    text = authAvailability.message ?: authUnavailableMessage,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 12.dp)
@@ -134,6 +137,12 @@ fun AuthScreen(
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 12.dp)
                 )
+                TextButton(
+                    onClick = { viewModel.resetForRetry() },
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Text(text = authRetryMessage)
+                }
             }
         }
     }

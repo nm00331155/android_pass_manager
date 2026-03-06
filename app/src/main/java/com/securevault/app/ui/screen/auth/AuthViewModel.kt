@@ -3,6 +3,7 @@ package com.securevault.app.ui.screen.auth
 import android.content.Context
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
+import com.securevault.app.biometric.AuthAvailability
 import com.securevault.app.biometric.AuthUiState
 import com.securevault.app.biometric.BiometricAuthManager
 import com.securevault.app.util.AutoLockManager
@@ -32,7 +33,14 @@ class AuthViewModel @Inject constructor(
      * 現在端末で認証機能が利用可能かを返す。
      */
     fun isAuthAvailable(context: Context): Boolean {
-        return biometricAuthManager.canAuthenticate(context).isAvailable
+        return getAuthAvailability(context).isAvailable
+    }
+
+    /**
+     * 現在端末で利用可能な認証方式の判定結果を返す。
+     */
+    fun getAuthAvailability(context: Context): AuthAvailability {
+        return biometricAuthManager.canAuthenticate(context)
     }
 
     /**
@@ -70,5 +78,13 @@ class AuthViewModel @Inject constructor(
     /** エラーメッセージをクリアする。 */
     fun clearError() {
         _errorMessage.value = null
+    }
+
+    /**
+     * 認証状態をリトライ可能な初期状態へ戻す。
+     */
+    fun resetForRetry() {
+        biometricAuthManager.resetState()
+        clearError()
     }
 }
