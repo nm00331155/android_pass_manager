@@ -13,6 +13,7 @@ class SecureVaultApplication : Application() {
 
 	override fun onCreate() {
 		super.onCreate()
+		System.loadLibrary("sqlcipher")
 		autoLockManager.start()
 	}
 }

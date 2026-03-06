@@ -67,14 +67,14 @@ class CsvImportParserTest {
     fun `parse Firefox CSV extracts domain as service name`() {
         val csv = """
             url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged
-            https://accounts.google.com/signin,user1,pass1,,https://accounts.google.com,{uuid},1700000000000,1700001000000,1700001000000
+            https://github.com/login,user1,pass1,,https://github.com,{uuid},1700000000000,1700001000000,1700001000000
         """.trimIndent()
 
         val result = parser.parse(csv, ImportSource.FIREFOX)
 
         assertEquals(1, result.size)
-        assertEquals("accounts.google.com", result[0].serviceName)
-        assertEquals("https://accounts.google.com/signin", result[0].serviceUrl)
+        assertEquals("github.com", result[0].serviceName)
+        assertEquals("https://github.com/login", result[0].serviceUrl)
         assertEquals("user1", result[0].username)
         assertEquals("pass1", result[0].password)
         assertNull(result[0].notes)
@@ -84,7 +84,7 @@ class CsvImportParserTest {
     fun `parse 1Password CSV maps expected fields`() {
         val csv = """
             Title,Website,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
-            GitHub,https://github.com,user1,pass1,,0,0,,メモ
+            GitHub,https://github.com,user1,pass1,,0,0,,Important
         """.trimIndent()
 
         val result = parser.parse(csv, ImportSource.ONE_PASSWORD)
@@ -94,7 +94,7 @@ class CsvImportParserTest {
         assertEquals("https://github.com", result[0].serviceUrl)
         assertEquals("user1", result[0].username)
         assertEquals("pass1", result[0].password)
-        assertEquals("メモ", result[0].notes)
+        assertEquals("Important", result[0].notes)
     }
 
     @Test
@@ -109,6 +109,23 @@ class CsvImportParserTest {
         assertEquals(1, result.size)
         assertEquals("iCloud", result[0].serviceName)
         assertEquals("https://icloud.com", result[0].serviceUrl)
+        assertEquals("user1", result[0].username)
+        assertEquals("pass1", result[0].password)
+        assertEquals("メモ", result[0].notes)
+    }
+
+    @Test
+    fun `parse KeePass CSV maps expected fields`() {
+        val csv = """
+            Title,Username,Password,URL,Notes
+            GitHub,user1,pass1,https://github.com,メモ
+        """.trimIndent()
+
+        val result = parser.parse(csv, ImportSource.KEEPASS)
+
+        assertEquals(1, result.size)
+        assertEquals("GitHub", result[0].serviceName)
+        assertEquals("https://github.com", result[0].serviceUrl)
         assertEquals("user1", result[0].username)
         assertEquals("pass1", result[0].password)
         assertEquals("メモ", result[0].notes)
@@ -151,14 +168,15 @@ class CsvImportParserTest {
     @Test
     fun `header matching is case insensitive`() {
         val csv = """
-            NAME,URL,USERNAME,PASSWORD,NOTE
-            GitHub,https://github.com,user1,pass1,メモ
+            NAME,URL,Username,PASSWORD,Note
+            GitHub,https://github.com,user1,pass1,test
         """.trimIndent()
 
         val result = parser.parse(csv, ImportSource.BRAVE)
 
         assertEquals(1, result.size)
         assertEquals("GitHub", result[0].serviceName)
+        assertEquals("test", result[0].notes)
     }
 
     @Test
@@ -195,28 +213,48 @@ class CsvImportParserTest {
         val csv = """
             name,url,username,password,note
 
-            GitHub,https://github.com,user1,pass1,メモ1
+            GitHub,https://github.com,user1,pass1,memo
 
-            GitLab,https://gitlab.com,user2,pass2,メモ2
+            Twitter,https://twitter.com,user2,pass2,
         """.trimIndent()
 
         val result = parser.parse(csv, ImportSource.BRAVE)
 
         assertEquals(2, result.size)
+        assertEquals("GitHub", result[0].serviceName)
+        assertEquals("Twitter", result[1].serviceName)
     }
 
     @Test
     fun `rows with blank password are skipped`() {
         val csv = """
             name,url,username,password,note
-            GitHub,https://github.com,user1,,メモ1
-            GitLab,https://gitlab.com,user2,pass2,メモ2
+            GitHub,https://github.com,user1,,memo
+            Twitter,https://twitter.com,user2,pass2,
         """.trimIndent()
 
         val result = parser.parse(csv, ImportSource.BRAVE)
 
         assertEquals(1, result.size)
-        assertEquals("GitLab", result[0].serviceName)
+        assertEquals("Twitter", result[0].serviceName)
         assertEquals("user2", result[0].username)
+    }
+
+    @Test
+    fun `parse SecureVault CSV keeps category default as other`() {
+        val csv = """
+            serviceName,serviceUrl,username,password,notes,category
+            GitHub,https://github.com,user1,pass1,メモ,login
+        """.trimIndent()
+
+        val result = parser.parse(csv, ImportSource.SECUREVAULT)
+
+        assertEquals(1, result.size)
+        assertEquals("GitHub", result[0].serviceName)
+        assertEquals("https://github.com", result[0].serviceUrl)
+        assertEquals("user1", result[0].username)
+        assertEquals("pass1", result[0].password)
+        assertEquals("メモ", result[0].notes)
+        assertEquals("other", result[0].category)
     }
 }

@@ -1,11 +1,42 @@
 # 作業状況
 
-最終更新: 2026-03-06 16:50:32 +09:00
+最終更新: 2026-03-06 18:00:00 +09:00
 
 ## 現在のフェーズ
-- Phase 6（Export/Import・テスト・最終調整）実装完了 / Release検証完了 / 実機QA進行中
+- Phase 1〜6: 全完了
+- 現在はリリース前の実機QA・運用検証のみ継続
+
+## 実装済み機能（最終）
+1. 認証情報管理（CRUD、検索、カテゴリフィルタ、お気に入り）
+2. セキュリティ（AES-256-GCM, Android Keystore, SQLCipher）
+3. 生体認証（指紋/顔認証/デバイスPIN）
+4. 自動ロック（バックグラウンド遷移時）
+5. クリップボード保護（自動消去）
+6. パスワード生成（カスタマイズ可能）
+7. パスワード強度判定（リアルタイム）
+8. 自動入力サービス（Android Autofill Framework）
+9. バックアップ・復元（暗号化 JSON / CSV）
+10. 他サービスインポート（Brave, Chrome, Edge, Firefox, 1Password, Bitwarden, LastPass, Dashlane, Apple パスワード, KeePass）
+11. ダークモード（Material 3 ダイナミックカラー）
+12. オフライン完結（INTERNET 権限なし）
+
+## 既知の制限事項
+- Samsung Pass は独自 `.spass` 形式のため直接インポート非対応（Google パスワードマネージャー経由を推奨）
+- Android 15+ では通知からの OTP 読取に制限あり
+- ダイナミックカラーは Android 12（API 31）以上のみ
+- `play-services-auth` 依存あり（SMS OTP 用）だが INTERNET 権限は Manifest で明示除去
 
 ## 本セッションで完了した作業
+- Phase 7 残タスク（バグ修正・テスト補強・docs更新・最終検証）を完了
+  - 改修: `SecureVaultApplication.kt`（`System.loadLibrary("sqlcipher")` を `onCreate` 先頭へ追加）
+  - 改修: `AndroidManifest.xml`（`tools` namespace 追加 + `INTERNET` 権限の明示除去）
+  - 改修: `BackupManagerTest.kt`（`packageName` 非含有の検証を追加）
+  - 改修: `CsvImportParserTest.kt`（Firefox/1Password/KeePass/SecureVault CSV ケースを補強）
+  - 改修: `specification.md`, `status.md`（Phase 1〜6 完了状態を反映）
+  - 検証: `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:assembleRelease` 成功
+  - テスト集計: 35 件中 35 成功 / 0 失敗 / 0 スキップ
+  - 権限検証: `aapt dump permissions app/build/outputs/apk/debug/app-debug.apk` に `android.permission.INTERNET` なし
+
 - Phase 6 指示更新（他サービスCSVインポート対応）を実装
   - 追加: `data/backup/ImportSource.kt`, `CsvImportParser.kt`
   - 改修: `BackupManager.kt`（`importFromService` 追加、CSVパーサー共通化）

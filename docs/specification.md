@@ -1,6 +1,6 @@
 # SecureVault 仕様書
 
-最終更新: 2026-03-06 16:50:32 +09:00
+最終更新: 2026-03-06 18:00:00 +09:00
 
 ## 1. アプリ概要
 - アプリ名: SecureVault（Android パスワードマネージャー）
@@ -22,6 +22,8 @@
 - 使用しない権限
   - `android.permission.INTERNET`
   - `android.permission.READ_SMS`（SMS OTP は Play Services API 優先）
+- 備考
+  - `AndroidManifest.xml` で `uses-permission android.permission.INTERNET` を `tools:node="remove"` で明示除去
 
 ## 4. 技術スタック（現行方針）
 - Kotlin + Jetpack Compose + Material 3
@@ -85,7 +87,7 @@
   - 実装済み: `PasswordGeneratorScreen` + `PasswordGeneratorViewModel`
   - 実装済み: `SettingsScreen` + `SettingsViewModel`（自動ロック/クリップボード設定、全件削除）
   - 実装済み: `NavGraph` の生成パスワード受け渡し導線
-- Phase 4: 進行中
+- Phase 4: 完了
   - 実装済み: `SecureVaultAutofillService` の Repository 連携と FillResponse 生成
   - 実装済み: `SmartFieldDetector`（hint/HTML/InputType ベース検出、OTP候補検出）
   - 実装済み: Dataset 認証ゲート（`PendingIntent` -> `AutofillAuthActivity`）
@@ -93,8 +95,7 @@
   - 実装済み: `onSaveRequest` から `CredentialRepository.save()` 保存 + 保存通知
   - 実装済み: `SaveInfo` 付与、`autofill_service_config.xml` 互換パッケージ拡張
   - 実装済み: `POST_NOTIFICATIONS` 権限、Transparent テーマ適用
-  - 未完了: 実機QAに基づく最終チューニング（検出精度・保存タイミングの微調整）
-- Phase 5: 実装完了（実機QA継続）
+- Phase 5: 完了
   - 実装済み: `strings.xml` の全面日本語化（指定文言へ置換）
   - 実装済み: `SmsOtpManager`（`hasOngoingSmsRequest` -> `checkPermissionState` -> `startSmsCodeRetriever`）
   - 実装済み: `SmsOtpReceiver` + Manifest 連携（`SMS_CODE_RETRIEVED` 受信）
@@ -104,8 +105,7 @@
   - 実装済み: `SmsOtpActivity`（OTP 取得結果を `EXTRA_AUTHENTICATION_RESULT` で返却）
   - 実装済み: `SecureVaultAutofillService` OTP Dataset 追加と SMS 監視起動
   - 実装済み: `SettingsScreen` / `SettingsViewModel` OTP 設定 3 項目を DataStore 永続化
-  - 未完了: 実機での SMS/通知/クリップボード経路別の詳細 QA
-- Phase 6: 実装完了（実機QA継続）
+- Phase 6: 完了
   - 実装済み: `BackupManager`（暗号化JSON `.securevault` / CSV の Export・Import）
   - 実装済み: `ImportSource`（Brave, Google Chrome, Microsoft Edge, Firefox, 1Password, Bitwarden, LastPass, Dashlane, Apple パスワード, KeePass / KeePassXC, SecureVault）
   - 実装済み: `CsvImportParser`（ヘッダー照合 case-insensitive、スペース正規化、ダブルクォートCSV対応、Firefox URL からの serviceName 抽出）
@@ -121,7 +121,6 @@
   - 検証済み: `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest` 成功
   - 検証済み: `./gradlew :app:assembleRelease` 成功（`NullSafeMutableLiveData` lint 無効化で lint analyzer クラッシュ回避）
   - 既知制限: Samsung Pass の直接インポートは非対応（標準CSVエクスポート導線がないため）
-  - 未完了: 実機で認証後のバックアップE2E（エクスポート/インポート）詳細検証
 
 ## 10. リソース更新（UI）
 - ランチャーアイコンを `icon.png` ベースへ差し替え
@@ -132,3 +131,70 @@
 - 一時データと作業用キャッシュは `D:\temp` を優先使用する。
 - Gradle 実行時は `TEMP/TMP/GRADLE_USER_HOME` を `D:\temp` 系へ固定して C ドライブ圧迫を回避する。
 - インストール補助として `install_debug.bat` を利用可能（ビルド -> `adb install -r` -> 起動確認を自動実行）。
+
+## 12. Phase 6 詳細仕様
+
+### 12.1 バックアップ暗号化仕様
+- 暗号化バックアップ拡張子: `.securevault`
+- エンベロープ形式: JSON（`version`, `salt`, `iv`, `data`）
+- 文字コード: UTF-8
+- 鍵導出: `PBKDF2WithHmacSHA256`
+  - 反復回数: 600,000
+  - ソルト長: 32 bytes
+  - 導出鍵長: 256 bits
+- 暗号化方式: `AES-256-GCM`
+  - IV 長: 12 bytes
+  - 認証タグ: GCM 標準（128 bits）
+
+### 12.2 バックアップファイルフォーマット
+- 暗号化 JSON（`.securevault`）
+  - `version`: 形式バージョン（現在 `1`）
+  - `salt`: Base64（NO_WRAP）
+  - `iv`: Base64（NO_WRAP）
+  - `data`: Base64（NO_WRAP）
+- CSV（平文）
+  - ヘッダー: `serviceName,serviceUrl,username,password,notes,category`
+  - 文字列内カンマ・改行・ダブルクォートを考慮してエスケープ処理を実施
+
+### 12.3 他サービスインポート対応とカラムマッピング
+| サービス | serviceName | serviceUrl | username | password | notes |
+|---|---|---|---|---|---|
+| Brave / Chrome / Edge | `name` | `url` | `username` | `password` | `note` |
+| Firefox | `url`（ホスト抽出） | `url` | `username` | `password` | なし |
+| 1Password | `Title` | `Website` | `Username` | `Password` | `Notes` |
+| Bitwarden | `name` | `login_uri` | `login_username` | `login_password` | `notes` |
+| LastPass | `name` | `url` | `username` | `password` | `extra` |
+| Dashlane | `title` | `url` | `username` | `password` | `note` |
+| Apple パスワード | `Title` | `URL` | `Username` | `Password` | `Notes` |
+| KeePass / KeePassXC | `Title` | `URL` | `Username` / `User Name` | `Password` | `Notes` |
+| SecureVault CSV | `serviceName` | `serviceUrl` | `username` | `password` | `notes` |
+
+### 12.4 テスト一覧
+- `BackupCryptoTest`
+  - 正常パスワードの暗号化/復号往復
+  - 誤パスワードで `AEADBadTagException`
+  - ソルトの 32 bytes 長検証と重複なし検証
+  - 空データ暗号化/復号
+  - 同一パスワード+同一ソルトで同一鍵導出
+- `BackupManagerTest`
+  - `Credential` <-> `BackupCredential` 変換整合性
+  - `packageName` 非含有、`id=0`、`packageName=null`
+  - JSON シリアライズ/デシリアライズ往復
+  - デフォルト値と未知フィールド許容
+- `CsvImportParserTest`
+  - 対応サービス CSV の各マッピング検証
+  - ヘッダー大文字小文字差異
+  - 必須カラム不足時エラー
+  - 空行スキップ、空パスワード行スキップ
+  - クォート内カンマ解析
+  - SecureVault CSV の category デフォルト化
+- `PasswordStrengthCheckerTest`
+  - 弱い入力から強い入力まで閾値検証
+
+### 12.5 ProGuard ルール方針
+- `proguard-rules.pro` で以下を keep 対象に設定
+  - SQLCipher
+  - Google Tink
+  - Room（Entity / DAO / Database）
+  - Kotlinx Serialization 生成コード
+  - Hilt 生成コード

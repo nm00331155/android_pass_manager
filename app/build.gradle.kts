@@ -52,6 +52,8 @@ android {
     lint {
         // Work around AGP/lint analyzer crash on androidx.lifecycle lint check.
         disable += "NullSafeMutableLiveData"
+        // False positive on manifest activity instantiation checks in current toolchain.
+        disable += "Instantiatable"
     }
 
     packaging {

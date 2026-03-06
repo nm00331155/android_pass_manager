@@ -40,6 +40,7 @@ class BackupManagerTest {
         )
 
         val backup = credential.toBackup()
+        val serializedBackup = json.encodeToString(backup)
 
         assertEquals("GitHub", backup.serviceName)
         assertEquals("https://github.com", backup.serviceUrl)
@@ -50,6 +51,7 @@ class BackupManagerTest {
         assertTrue(backup.isFavorite)
         assertEquals(1700000000000L, backup.createdAt)
         assertEquals(1700001000000L, backup.updatedAt)
+        assertFalse(serializedBackup.contains("packageName"))
     }
 
     /**
