@@ -101,6 +101,8 @@
     <string name="settings_sms_otp">SMS ワンタイム自動入力</string>
     <string name="settings_notification_otp">通知からの OTP 読取</string>
     <string name="settings_clipboard_otp">クリップボードの OTP 検出</string>
+    <string name="settings_export_log">診断ログをエクスポート</string>
+    <string name="settings_log_exported">ログを出力しました</string>
 
     <!-- タイムアウト -->
     <string name="timeout_immediate">即時</string>

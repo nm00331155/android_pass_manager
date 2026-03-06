@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -37,11 +38,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.securevault.app.BuildConfig
 import com.securevault.app.R
 import com.securevault.app.ui.component.ConfirmDialog
+import kotlinx.coroutines.launch
 
 /**
  * 設定画面を表示し、セキュリティ設定と OTP 設定の変更を受け付ける。
@@ -60,6 +63,7 @@ fun SettingsScreen(
     val otpNotificationEnabled by viewModel.otpNotificationEnabled.collectAsStateWithLifecycle()
     val otpClipboardEnabled by viewModel.otpClipboardEnabled.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
     var showDeleteFinalConfirm by rememberSaveable { mutableStateOf(false) }
@@ -174,6 +178,44 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.settings_backup))
+            }
+
+            OutlinedButton(
+                onClick = {
+                    runCatching {
+                        val logFile = viewModel.exportLog(context)
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            logFile
+                        )
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(
+                            Intent.createChooser(
+                                shareIntent,
+                                context.getString(R.string.settings_export_log)
+                            )
+                        )
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.settings_log_exported)
+                            )
+                        }
+                    }.onFailure { throwable ->
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                throwable.message ?: context.getString(R.string.backup_error, "unknown")
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.settings_export_log))
             }
 
             Text(

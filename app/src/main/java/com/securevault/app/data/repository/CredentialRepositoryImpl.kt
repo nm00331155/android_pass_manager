@@ -1,11 +1,11 @@
 package com.securevault.app.data.repository
 
-import android.util.Log
 import com.securevault.app.data.crypto.CryptoEngine
 import com.securevault.app.data.crypto.EncryptedData
 import com.securevault.app.data.db.dao.CredentialDao
 import com.securevault.app.data.db.entity.CredentialEntity
 import com.securevault.app.data.repository.model.Credential
+import com.securevault.app.util.AppLogger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -20,41 +20,63 @@ import kotlinx.coroutines.flow.map
 @Singleton
 class CredentialRepositoryImpl @Inject constructor(
     private val credentialDao: CredentialDao,
-    private val cryptoEngine: CryptoEngine
+    private val cryptoEngine: CryptoEngine,
+    private val logger: AppLogger
 ) : CredentialRepository {
 
     /** 全件を取得する。復号失敗レコードは除外する。 */
     override fun getAll(): Flow<List<Credential>> {
         return credentialDao.getAll()
-            .map { list -> list.mapNotNull { it.toDomainOrNull() } }
+            .map { list ->
+                logger.d(TAG, "getAll: raw entity count=${list.size}")
+                val decoded = list.mapNotNull { it.toDomainOrNull() }
+                logger.d(TAG, "getAll: decoded count=${decoded.size}, failed=${list.size - decoded.size}")
+                decoded
+            }
             .flowOn(Dispatchers.Default)
     }
 
     /** ID 指定で1件取得する。 */
     override fun getById(id: Long): Flow<Credential?> {
         return credentialDao.getById(id)
-            .map { entity -> entity?.toDomainOrNull() }
+            .map { entity ->
+                val decoded = entity?.toDomainOrNull()
+                logger.d(TAG, "getById: id=$id, found=${decoded != null}")
+                decoded
+            }
             .flowOn(Dispatchers.Default)
     }
 
     /** サービス名で検索する。 */
     override fun search(query: String): Flow<List<Credential>> {
         return credentialDao.searchByServiceName(query)
-            .map { list -> list.mapNotNull { it.toDomainOrNull() } }
+            .map { list ->
+                val decoded = list.mapNotNull { it.toDomainOrNull() }
+                logger.d(TAG, "search: query=$query, raw=${list.size}, decoded=${decoded.size}")
+                decoded
+            }
             .flowOn(Dispatchers.Default)
     }
 
     /** カテゴリで取得する。 */
     override fun getByCategory(category: String): Flow<List<Credential>> {
         return credentialDao.getByCategory(category)
-            .map { list -> list.mapNotNull { it.toDomainOrNull() } }
+            .map { list ->
+                val decoded = list.mapNotNull { it.toDomainOrNull() }
+                logger.d(TAG, "getByCategory: category=$category, raw=${list.size}, decoded=${decoded.size}")
+                decoded
+            }
             .flowOn(Dispatchers.Default)
     }
 
     /** お気に入りのみ取得する。 */
     override fun getFavorites(): Flow<List<Credential>> {
         return credentialDao.getFavorites()
-            .map { list -> list.mapNotNull { it.toDomainOrNull() } }
+            .map { list ->
+                val decoded = list.mapNotNull { it.toDomainOrNull() }
+                logger.d(TAG, "getFavorites: raw=${list.size}, decoded=${decoded.size}")
+                decoded
+            }
             .flowOn(Dispatchers.Default)
     }
 
@@ -73,19 +95,23 @@ class CredentialRepositoryImpl @Inject constructor(
 
     /** 新規保存または更新する。 */
     override suspend fun save(credential: Credential) {
+        logger.d(TAG, "save: id=${credential.id}, service=${credential.serviceName}")
         val now = System.currentTimeMillis()
         val createdAt = if (credential.id == 0L) now else credential.createdAt
         val entity = credential.toEntity(createdAt = createdAt, updatedAt = now)
 
         if (credential.id == 0L) {
-            credentialDao.insert(entity)
+            val insertedId = credentialDao.insert(entity)
+            logger.d(TAG, "save: inserted newId=$insertedId")
         } else {
             credentialDao.update(entity)
+            logger.d(TAG, "save: updated id=${credential.id}")
         }
     }
 
     /** 認証情報をバッチ保存する。 */
     override suspend fun saveAll(credentials: List<Credential>) {
+        logger.d(TAG, "saveAll: count=${credentials.size}")
         if (credentials.isEmpty()) {
             return
         }
@@ -96,6 +122,7 @@ class CredentialRepositoryImpl @Inject constructor(
             credential.toEntity(createdAt = createdAt, updatedAt = now)
         }
         credentialDao.insertAll(entities)
+        logger.d(TAG, "saveAll: inserted ${entities.size} entities")
     }
 
     /** ID 指定で削除する。 */
@@ -166,7 +193,7 @@ class CredentialRepositoryImpl @Inject constructor(
                 isFavorite = isFavorite
             )
         }.onFailure { throwable ->
-            Log.e(TAG, "Credential decode FAILED for id=$id, serviceName=$serviceName", throwable)
+            logger.e(TAG, "DECRYPT FAILED id=$id service=$serviceName", throwable)
         }.getOrNull()
     }
 

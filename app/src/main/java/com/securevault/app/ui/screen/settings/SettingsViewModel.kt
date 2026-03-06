@@ -8,9 +8,11 @@ import androidx.lifecycle.viewModelScope
 import com.securevault.app.data.repository.CredentialRepository
 import com.securevault.app.data.store.securitySettingsDataStore
 import com.securevault.app.util.AutoLockManager
+import com.securevault.app.util.AppLogger
 import com.securevault.app.util.ClipboardSettingsManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +32,8 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     autoLockManager: AutoLockManager,
     private val clipboardSettingsManager: ClipboardSettingsManager,
-    private val credentialRepository: CredentialRepository
+    private val credentialRepository: CredentialRepository,
+    private val logger: AppLogger
 ) : ViewModel() {
 
     val autoLockTimeoutSeconds: StateFlow<Int> = autoLockManager.autoLockTimeoutSeconds
@@ -119,6 +122,11 @@ class SettingsViewModel @Inject constructor(
                 _messages.emit(throwable.message ?: "全件削除に失敗しました。")
             }
         }
+    }
+
+    /** 診断ログをファイル出力して返す。 */
+    fun exportLog(context: Context): File {
+        return logger.exportToFile(context)
     }
 
     private fun observeOtpSettings() {

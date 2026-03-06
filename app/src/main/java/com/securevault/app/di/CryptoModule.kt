@@ -3,6 +3,7 @@ package com.securevault.app.di
 import android.content.Context
 import com.securevault.app.data.crypto.CryptoEngine
 import com.securevault.app.data.crypto.MasterKeyManager
+import com.securevault.app.util.AppLogger
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -27,7 +28,11 @@ object CryptoModule {
 
     @Provides
     @Singleton
-    fun provideCryptoEngine(masterKeyManager: MasterKeyManager): CryptoEngine {
-        return CryptoEngine(masterKeyManager)
+    fun provideCryptoEngine(
+        @ApplicationContext context: Context,
+        masterKeyManager: MasterKeyManager,
+        logger: AppLogger
+    ): CryptoEngine {
+        return CryptoEngine(context, masterKeyManager, logger)
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,7 +33,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
@@ -78,11 +80,17 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text(text = stringResource(R.string.app_name)) },
                 actions = {
-                    TextButton(onClick = onGeneratorClick) {
-                        Text(text = stringResource(R.string.generator_title))
+                    IconButton(onClick = onGeneratorClick) {
+                        Icon(
+                            imageVector = Icons.Outlined.Lock,
+                            contentDescription = stringResource(R.string.generator_title)
+                        )
                     }
-                    TextButton(onClick = onSettingsClick) {
-                        Text(text = stringResource(R.string.open_settings))
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.open_settings)
+                        )
                     }
                 }
             )
@@ -260,7 +268,10 @@ private fun CategoryFilterRow(
         "other" to R.string.category_other
     )
 
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 0.dp)
+    ) {
         items(categories) { (value, labelRes) ->
             FilterChip(
                 selected = selectedCategory == value,

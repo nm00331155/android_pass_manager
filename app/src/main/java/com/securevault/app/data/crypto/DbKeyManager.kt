@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.crypto.tink.subtle.Hkdf
+import com.securevault.app.util.AppLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.SecureRandom
 import javax.crypto.Cipher
@@ -25,7 +26,8 @@ private val Context.dbKeyStoreDataStore: DataStore<Preferences> by preferencesDa
 @Singleton
 class DbKeyManager @Inject constructor(
     @ApplicationContext private val appContext: Context,
-    private val cryptoEngine: CryptoEngine
+    private val cryptoEngine: CryptoEngine,
+    private val logger: AppLogger
 ) {
 
     /**
@@ -35,6 +37,7 @@ class DbKeyManager @Inject constructor(
     fun getOrCreatePassphrase(cipher: Cipher): CharArray {
         val seedBytes = getOrCreateSeed(cipher)
         val saltBytes = getOrCreateHkdfSalt()
+        logger.d(TAG, "getOrCreatePassphrase: seed=${seedBytes.size}B, salt=${saltBytes.size}B")
 
         val derivedBytes = Hkdf.computeHkdf(
             HKDF_ALGORITHM,
@@ -56,6 +59,7 @@ class DbKeyManager @Inject constructor(
      * アプリ側で Cipher を明示しない取得用オーバーロード。
      */
     fun getOrCreatePassphrase(): CharArray {
+        logger.d(TAG, "getOrCreatePassphrase: start")
         val cipher = cryptoEngine.getCipherForEncryption()
         return getOrCreatePassphrase(cipher)
     }
@@ -66,12 +70,14 @@ class DbKeyManager @Inject constructor(
         val seedIv = preferences[SEED_IV_KEY]
 
         if (encryptedSeed.isNullOrBlank() || seedIv.isNullOrBlank()) {
+            logger.i(TAG, "No stored seed found, generating new seed")
             val plainSeed = ByteArray(SEED_BYTE_LENGTH)
             secureRandom.nextBytes(plainSeed)
             saveEncryptedSeed(plainSeed, initialCipher)
             return plainSeed
         }
 
+        logger.d(TAG, "Decrypting stored seed")
         return decryptStoredSeed(encryptedSeed, seedIv)
     }
 
@@ -110,9 +116,11 @@ class DbKeyManager @Inject constructor(
         val preferences = runBlocking { appContext.dbKeyStoreDataStore.data.first() }
         val saltBase64 = preferences[HKDF_SALT_KEY]
         if (!saltBase64.isNullOrBlank()) {
+            logger.d(TAG, "Using stored HKDF salt")
             return CryptoEngine.fromBase64(saltBase64)
         }
 
+        logger.i(TAG, "No HKDF salt found, generating new salt")
         val saltBytes = ByteArray(HKDF_SALT_BYTE_LENGTH)
         secureRandom.nextBytes(saltBytes)
         runBlocking {
@@ -124,6 +132,7 @@ class DbKeyManager @Inject constructor(
     }
 
     private companion object {
+        const val TAG: String = "DbKeyManager"
         const val HKDF_ALGORITHM: String = "HmacSha256"
         const val HKDF_INFO: String = "securevault.db.passphrase.v1"
         const val PASSPHRASE_BYTE_LENGTH: Int = 32

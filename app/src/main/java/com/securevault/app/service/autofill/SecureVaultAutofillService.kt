@@ -18,8 +18,8 @@ import android.service.autofill.SaveCallback
 import android.service.autofill.SaveInfo
 import android.service.autofill.SaveRequest
 import android.text.InputType
-import android.util.Log
 import android.view.autofill.AutofillId
+import android.view.autofill.AutofillValue
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -28,6 +28,7 @@ import com.securevault.app.data.repository.CredentialRepository
 import com.securevault.app.data.repository.model.Credential
 import com.securevault.app.service.otp.SmsOtpActivity
 import com.securevault.app.service.otp.SmsOtpManager
+import com.securevault.app.util.AppLogger
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlin.math.abs
@@ -54,6 +55,9 @@ class SecureVaultAutofillService : AutofillService() {
     @Inject
     lateinit var smsOtpManager: SmsOtpManager
 
+    @Inject
+    lateinit var logger: AppLogger
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
@@ -61,14 +65,14 @@ class SecureVaultAutofillService : AutofillService() {
      */
     override fun onConnected() {
         createNotificationChannel()
-        Log.i(TAG, "Autofill service connected")
+        logger.i(TAG, "Autofill service connected")
     }
 
     /**
      * Called when Android unbinds this AutofillService.
      */
     override fun onDisconnected() {
-        Log.i(TAG, "Autofill service disconnected")
+        logger.i(TAG, "Autofill service disconnected")
     }
 
     /**
@@ -106,15 +110,18 @@ class SecureVaultAutofillService : AutofillService() {
             return
         }
 
-        Log.d(TAG, "onFillRequest package=$targetPackageName otpField=${targets.otpId != null}")
+        logger.d(
+            TAG,
+            "onFillRequest: pkg=$targetPackageName, username=${targets.usernameId}, password=${targets.passwordId}, otp=${targets.otpId}"
+        )
 
         val job = serviceScope.launch {
             if (targets.otpId != null) {
                 runCatching {
                     val status = smsOtpManager.startListening()
-                    Log.d(TAG, "SmsOtpManager start status=$status")
+                    logger.d(TAG, "SmsOtpManager start status=$status")
                 }.onFailure { throwable ->
-                    Log.w(TAG, "Failed to start SMS OTP listener", throwable)
+                    logger.w(TAG, "Failed to start SMS OTP listener", throwable)
                 }
             }
 
@@ -122,7 +129,7 @@ class SecureVaultAutofillService : AutofillService() {
                 runCatching {
                     resolveCredentials(targetPackageName, targets.webDomain)
                 }.getOrElse { throwable ->
-                    Log.w(TAG, "Failed to resolve autofill credentials", throwable)
+                    logger.w(TAG, "Failed to resolve autofill credentials", throwable)
                     emptyList()
                 }
             } else {
@@ -177,7 +184,7 @@ class SecureVaultAutofillService : AutofillService() {
                     callback.onSuccess()
                 }
             }.onFailure { throwable ->
-                Log.w(TAG, "Failed to save autofill credential", throwable)
+                logger.w(TAG, "Failed to save autofill credential", throwable)
                 withContext(Dispatchers.Main) {
                     callback.onFailure(SAVE_FAILURE_MESSAGE)
                 }
@@ -191,15 +198,17 @@ class SecureVaultAutofillService : AutofillService() {
         } else {
             emptyList()
         }
-        if (fromPackage.isNotEmpty()) {
-            return fromPackage.take(MAX_DATASET_ITEMS)
-        }
-
         val fromUrl = if (!webDomain.isNullOrBlank()) {
             credentialRepository.findByUrl(webDomain)
         } else {
             emptyList()
         }
+        logger.d(TAG, "resolveCredentials: fromPkg=${fromPackage.size}, fromUrl=${fromUrl.size}")
+
+        if (fromPackage.isNotEmpty()) {
+            return fromPackage.take(MAX_DATASET_ITEMS)
+        }
+
         if (fromUrl.isNotEmpty()) {
             return fromUrl.take(MAX_DATASET_ITEMS)
         }
@@ -226,12 +235,12 @@ class SecureVaultAutofillService : AutofillService() {
             var hasValue = false
 
             targets.usernameId?.let { usernameId ->
-                datasetBuilder.setValue(usernameId, null)
+                datasetBuilder.setValue(usernameId, AutofillValue.forText(""))
                 hasValue = true
             }
 
             targets.passwordId?.let { passwordId ->
-                datasetBuilder.setValue(passwordId, null)
+                datasetBuilder.setValue(passwordId, AutofillValue.forText(""))
                 hasValue = true
             }
 
@@ -249,7 +258,7 @@ class SecureVaultAutofillService : AutofillService() {
 
         targets.otpId?.let { otpId ->
             val otpDatasetBuilder = Dataset.Builder(createOtpPresentation())
-            otpDatasetBuilder.setValue(otpId, null)
+            otpDatasetBuilder.setValue(otpId, AutofillValue.forText(""))
 
             val otpAuthIntent = createOtpAuthenticationPendingIntent(otpId)
             otpDatasetBuilder.setAuthentication(otpAuthIntent.intentSender)
@@ -462,7 +471,7 @@ class SecureVaultAutofillService : AutofillService() {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            Log.d(TAG, "Skip save notification: POST_NOTIFICATIONS not granted")
+            logger.d(TAG, "Skip save notification: POST_NOTIFICATIONS not granted")
             return
         }
 
@@ -480,7 +489,7 @@ class SecureVaultAutofillService : AutofillService() {
                 notification
             )
         }.onFailure { throwable ->
-            Log.w(TAG, "Failed to show save notification", throwable)
+            logger.w(TAG, "Failed to show save notification", throwable)
         }
     }
 

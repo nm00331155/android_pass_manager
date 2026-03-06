@@ -2,11 +2,13 @@ package com.securevault.app.di
 
 import android.content.Context
 import androidx.room.Room
+import com.securevault.app.data.crypto.CryptoEngine
 import com.securevault.app.data.crypto.DbKeyManager
 import com.securevault.app.data.db.SecureVaultDatabase
 import com.securevault.app.data.db.dao.CredentialDao
 import com.securevault.app.data.repository.CredentialRepository
 import com.securevault.app.data.repository.CredentialRepositoryImpl
+import com.securevault.app.util.AppLogger
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -58,8 +60,9 @@ object DatabaseModule {
     @Singleton
     fun provideCredentialRepository(
         dao: CredentialDao,
-        cryptoEngine: com.securevault.app.data.crypto.CryptoEngine
+        cryptoEngine: CryptoEngine,
+        logger: AppLogger
     ): CredentialRepository {
-        return CredentialRepositoryImpl(dao, cryptoEngine)
+        return CredentialRepositoryImpl(dao, cryptoEngine, logger)
     }
 }

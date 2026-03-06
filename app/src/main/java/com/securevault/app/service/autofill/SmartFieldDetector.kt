@@ -220,11 +220,7 @@ class SmartFieldDetector @Inject constructor() {
             "mail",
             "email",
             "account",
-            "userid",
-            "ユーザー",
-            "利用者",
-            "メール",
-            "アカウント"
+            "userid"
         )
 
         val PASSWORD_KEYWORDS = listOf(
@@ -232,9 +228,7 @@ class SmartFieldDetector @Inject constructor() {
             "password",
             "pwd",
             "pin",
-            "secret",
-            "暗証",
-            "パスワード"
+            "secret"
         )
 
         val OTP_HINT_TOKENS = listOf("smsotpcode", "otp", "verification", "code")
@@ -244,10 +238,7 @@ class SmartFieldDetector @Inject constructor() {
             "code",
             "token",
             "verify",
-            "verification",
-            "認証",
-            "確認コード",
-            "ワンタイム"
+            "verification"
         )
     }
 }

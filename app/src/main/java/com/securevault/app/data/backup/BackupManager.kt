@@ -3,9 +3,9 @@ package com.securevault.app.data.backup
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
-import android.util.Log
 import com.securevault.app.data.repository.CredentialRepository
 import com.securevault.app.data.repository.model.Credential
+import com.securevault.app.util.AppLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -29,7 +29,8 @@ import org.json.JSONObject
 class BackupManager @Inject constructor(
     private val credentialRepository: CredentialRepository,
     private val csvImportParser: CsvImportParser,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val logger: AppLogger
 ) {
 
     private val json = Json {
@@ -46,6 +47,7 @@ class BackupManager @Inject constructor(
         if (credentials.isEmpty()) return@withContext 0
 
         val backupList = credentials.map { it.toBackup() }
+        logger.d(TAG, "exportEncrypted: ${backupList.size} credentials")
         val plainBytes = json.encodeToString(backupList).toByteArray(Charsets.UTF_8)
 
         val salt = BackupCrypto.generateSalt()
@@ -141,7 +143,9 @@ class BackupManager @Inject constructor(
         strategy: ImportStrategy
     ): Int = withContext(Dispatchers.IO) {
         val csvContent = readTextFromUri(inputUri)
+        logger.d(TAG, "importFromService: source=$source, csvLength=${csvContent.length}")
         val backupList = csvImportParser.parse(csvContent, source)
+        logger.d(TAG, "importFromService: parsed ${backupList.size} entries")
         importCredentials(backupList, strategy)
     }
 
@@ -210,7 +214,7 @@ class BackupManager @Inject constructor(
             credentialRepository.save(update)
         }
 
-        Log.d(TAG, "Import completed: inserted=${toInsert.size}, updated=${pendingUpdateById.size}")
+        logger.d(TAG, "Import completed: inserted=${toInsert.size}, updated=${pendingUpdateById.size}")
         return toInsert.size + pendingUpdateById.size
     }
 
