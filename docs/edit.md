@@ -1420,4 +1420,4 @@ ExportImportTest.kt: エクスポート→インポートの往復テスト
 
 **Phase 4** はテストが難しい部分です。Android 公式の `AutofillFramework` サンプルアプリ（GitHub上に公開されている）を参考にデバッグしてください。
 
-**Phase 5** は SMS OTP のテストに実機が必要です。エミュレータでは `SmsCodeAutofillClient` が動作しない場合があります。
+**Phase 5** は SMS OTP のテストに実機が必要です。エミュレータでは `SmsCodeAutofillClient` が動作しない場合があります

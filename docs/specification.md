@@ -1,6 +1,6 @@
 # SecureVault 仕様書
 
-最終更新: 2026-03-06 14:08:27 +09:00
+最終更新: 2026-03-06 14:46:45 +09:00
 
 ## 1. アプリ概要
 - アプリ名: SecureVault（Android パスワードマネージャー）
@@ -86,8 +86,19 @@
   - 実装済み: `NavGraph` の生成パスワード受け渡し導線
 - Phase 4: 進行中
   - 実装済み: `SecureVaultAutofillService` の Repository 連携と FillResponse 生成
-  - 未完了: `onSaveRequest` の保存実装、Autofill認証連携、検出精度向上
+  - 実装済み: `SmartFieldDetector`（hint/HTML/InputType ベース検出、OTP候補検出）
+  - 実装済み: Dataset 認証ゲート（`PendingIntent` -> `AutofillAuthActivity`）
+  - 実装済み: `AutofillAuthActivity` の生体認証連携と認証成功時 Dataset 返却
+  - 実装済み: `onSaveRequest` から `CredentialRepository.save()` 保存 + 保存通知
+  - 実装済み: `SaveInfo` 付与、`autofill_service_config.xml` 互換パッケージ拡張
+  - 実装済み: `POST_NOTIFICATIONS` 権限、Transparent テーマ適用
+  - 未完了: 実機QAに基づく最終チューニング（検出精度・保存タイミングの微調整）
 
-## 10. 開発運用ルール（ストレージ）
+## 10. リソース更新（UI）
+- ランチャーアイコンを `icon.png` ベースへ差し替え
+  - `res/drawable-nodpi/ic_launcher_foreground_image.png` を追加
+  - `res/drawable/ic_launcher_foreground.xml` を bitmap + inset 構成へ変更
+
+## 11. 開発運用ルール（ストレージ）
 - 一時データと作業用キャッシュは `D:\temp` を優先使用する。
 - Gradle 実行時は `TEMP/TMP/GRADLE_USER_HOME` を `D:\temp` 系へ固定して C ドライブ圧迫を回避する。

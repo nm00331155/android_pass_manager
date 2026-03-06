@@ -1,11 +1,39 @@
 # 作業状況
 
-最終更新: 2026-03-06 14:08:27 +09:00
+最終更新: 2026-03-06 14:46:45 +09:00
 
 ## 現在のフェーズ
-- Phase 3（コアUI）実装完了 / Phase 4（Autofill本実装）着手
+- Phase 3（コアUI）実装完了 / Phase 4（Autofill本実装）進行中
 
 ## 本セッションで完了した作業
+- Phase 4 実装を継続
+  - 追加: `SmartFieldDetector`
+    - `autofillHints` / HTML属性 / idEntry・hint文言 / InputType を組み合わせた3段階検出
+    - `usernameId`, `passwordId`, `otpId`, `webDomain`, `allAutofillIds` を返却
+  - 改修: `SecureVaultAutofillService`
+    - `com.securevault.app` への自己Autofillを除外
+    - Dataset 表示を `autofill_suggestion_item.xml` に統一
+    - 各 Dataset に `PendingIntent` 認証ゲートを追加（`AutofillAuthActivity` 起動）
+    - `SaveInfo` を付与（`FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE`）
+    - `onSaveRequest` を実装し、`CredentialRepository.save()` で保存
+    - 保存成功時に通知表示（channel: `autofill_save`）
+  - 改修: `AutofillAuthActivity`
+    - `FragmentActivity` + `@AndroidEntryPoint` 化
+    - `BiometricAuthManager.authenticate()` 連携
+    - 認証成功時に `Dataset` を `EXTRA_AUTHENTICATION_RESULT` で返却
+  - 更新: `AndroidManifest.xml`
+    - `POST_NOTIFICATIONS` 権限を追加
+    - `AutofillAuthActivity` テーマを `Theme.SecureVault.Transparent` へ変更
+  - 更新: `res/values/themes.xml`
+    - `Theme.SecureVault.Transparent` を追加
+  - 更新: `res/xml/autofill_service_config.xml`
+    - `maxLongVersionCode` 追加
+    - 対応ブラウザを拡張（Chrome dev, Firefox beta, Samsung Internet, Opera, Vivaldi, DuckDuckGo など）
+- アプリアイコンを `icon.png` に差し替え
+  - 追加: `res/drawable-nodpi/ic_launcher_foreground_image.png`
+  - 更新: `res/drawable/ic_launcher_foreground.xml`（bitmap + inset 参照へ変更）
+- 画面確認用スクリーンショットを追加
+  - `docs/screenshots/securevault_phase4_latest.png`
 - 次ステップ候補 1-3 をすべて実施
   - Phase 1 残タスク完了
     - `SettingsScreen` に自動ロック秒数設定UIを追加（即時/30秒/1分/5分/無効）
@@ -72,9 +100,15 @@
   - ADB更新: `adb install -r app/build/outputs/apk/debug/app-debug.apk` 成功
   - 起動確認: `adb shell monkey -p com.securevault.app ...` 成功
   - 端末反映: `lastUpdateTime=2026-03-06 14:08:27`
+- Phase 4 継続実装後の再検証
+  - ビルド: `./gradlew --no-daemon :app:assembleDebug` 成功
+  - テスト: `./gradlew --no-daemon :app:testDebugUnitTest` 成功
+  - ADB更新: `adb install -r app/build/outputs/apk/debug/app-debug.apk` 成功
+  - 起動確認: `adb shell monkey -p com.securevault.app ...` 成功
+  - 端末反映: `lastUpdateTime=2026-03-06 14:46:07`
 
 ## 進行中の作業
-- Phase 4 の本実装（Autofill保存フロー、認証連携、フィールド検出精度向上）
+- Phase 4 の実機QA（Autofill候補表示、認証経由入力、保存ダイアログ動作の詳細確認）
 
 ## 検出した課題
 - VS Code 側の `get_errors` は旧 AGP (`9.0.1`) キャッシュ参照が残る
@@ -89,6 +123,6 @@
 - 一時データ保存先は継続して `D:\temp` を標準運用
 
 ## 次の実施項目
-1. Phase 4 の保存フロー実装（`onSaveRequest` から暗号化保存）
-2. Autofill の認証必須化（`AutofillAuthActivity` + Biometric連携）
-3. UI/API 警告の順次解消（SearchBar / SwipeToDismiss / menuAnchor など）
+1. 実機で Autofill 認証経由入力（Chrome 等）を手動確認し、必要なら検出キーワードを微調整
+2. 保存通知の権限フロー（Android 13+）と onSave 発火条件を追加検証
+3. UI/API 警告の順次解消（SearchBar / SwipeToDismiss / menuAnchor / Autofill deprecation など）

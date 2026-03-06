@@ -12,6 +12,12 @@
     <string name="auth_unavailable">No authentication method is available on this device.</string>
     <string name="auth_activity_not_found">Could not initialize authentication screen.</string>
     <string name="auth_retry">Retry</string>
+    <string name="autofill_auth_title">Unlock SecureVault Autofill</string>
+    <string name="autofill_auth_subtitle">Authenticate to fill your saved credential</string>
+    <string name="autofill_save_channel_name">Autofill saves</string>
+    <string name="autofill_save_channel_description">Notifications shown after saving credentials from Autofill.</string>
+    <string name="autofill_save_notification_title">Credential saved</string>
+    <string name="autofill_save_notification_message">Saved %1$s to SecureVault</string>
 
     <string name="home_title">Passwords</string>
     <string name="add_edit_title_add">Add Password</string>

@@ -2,9 +2,16 @@
 <autofill-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:settingsActivity="com.securevault.app.ui.MainActivity">
 
-    <compatibility-package android:name="com.android.chrome" />
-    <compatibility-package android:name="com.chrome.beta" />
-    <compatibility-package android:name="org.mozilla.firefox" />
-    <compatibility-package android:name="com.brave.browser" />
-    <compatibility-package android:name="com.microsoft.emmx" />
+    <compatibility-package android:name="com.android.chrome" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="com.chrome.beta" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="com.chrome.dev" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="org.mozilla.firefox" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="org.mozilla.firefox_beta" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="com.brave.browser" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="com.microsoft.emmx" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="com.sec.android.app.sbrowser" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="com.opera.browser" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="com.opera.mini.native" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="com.vivaldi.browser" android:maxLongVersionCode="999999999" />
+    <compatibility-package android:name="com.duckduckgo.mobile.android" android:maxLongVersionCode="999999999" />
 </autofill-service>
