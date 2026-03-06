@@ -92,17 +92,6 @@ class MasterKeyManager @Inject constructor(
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            .setUserAuthenticationRequired(true)
-            .setInvalidatedByBiometricEnrollment(true)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            builder.setUserAuthenticationParameters(
-                AUTH_TIMEOUT_SECONDS,
-                KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
-            )
-        } else {
-            builder.setUserAuthenticationValidityDurationSeconds(AUTH_TIMEOUT_SECONDS)
-        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             builder.setIsStrongBoxBacked(useStrongBox)
@@ -124,7 +113,6 @@ class MasterKeyManager @Inject constructor(
 
     private companion object {
         const val KEY_ALIAS = "securevault_master_key"
-        const val AUTH_TIMEOUT_SECONDS = 300
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
     }
 }

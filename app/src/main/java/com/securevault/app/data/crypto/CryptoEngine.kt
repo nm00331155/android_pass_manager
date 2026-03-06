@@ -1,7 +1,5 @@
 package com.securevault.app.data.crypto
 
-import android.security.keystore.KeyPermanentlyInvalidatedException
-import android.util.Log
 import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
@@ -22,20 +20,8 @@ class CryptoEngine @Inject constructor(
     fun getCipherForEncryption(): Cipher {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         val key = masterKeyManager.getOrCreateMasterKey()
-
-        return try {
-            cipher.init(Cipher.ENCRYPT_MODE, key)
-            cipher
-        } catch (e: KeyPermanentlyInvalidatedException) {
-            Log.e(
-                TAG,
-                "Master key permanently invalidated, recreating. ALL EXISTING DATA WILL BE UNRECOVERABLE.",
-                e
-            )
-            val recreatedKey = masterKeyManager.recreateMasterKey()
-            cipher.init(Cipher.ENCRYPT_MODE, recreatedKey)
-            cipher
-        }
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+        return cipher
     }
 
     /**
@@ -44,15 +30,8 @@ class CryptoEngine @Inject constructor(
     fun getCipherForDecryption(iv: ByteArray): Cipher {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         val spec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
-
-        return try {
-            cipher.init(Cipher.DECRYPT_MODE, masterKeyManager.getOrCreateMasterKey(), spec)
-            cipher
-        } catch (e: KeyPermanentlyInvalidatedException) {
-            Log.e(TAG, "Master key permanently invalidated during decryption.", e)
-            masterKeyManager.recreateMasterKey()
-            throw IllegalStateException("暗号鍵が無効化されました。再認証後に再保存が必要です。", e)
-        }
+        cipher.init(Cipher.DECRYPT_MODE, masterKeyManager.getOrCreateMasterKey(), spec)
+        return cipher
     }
 
     /**
@@ -66,7 +45,6 @@ class CryptoEngine @Inject constructor(
     fun decrypt(encryptedData: EncryptedData, cipher: Cipher): String = decryptStatic(encryptedData, cipher)
 
     companion object {
-        private const val TAG = "CryptoEngine"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val GCM_TAG_LENGTH = 128
 

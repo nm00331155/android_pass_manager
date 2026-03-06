@@ -8,8 +8,10 @@ import com.securevault.app.data.db.entity.CredentialEntity
 import com.securevault.app.data.repository.model.Credential
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 /**
@@ -23,27 +25,37 @@ class CredentialRepositoryImpl @Inject constructor(
 
     /** 全件を取得する。復号失敗レコードは除外する。 */
     override fun getAll(): Flow<List<Credential>> {
-        return credentialDao.getAll().map { list -> list.mapNotNull { it.toDomainOrNull() } }
+        return credentialDao.getAll()
+            .map { list -> list.mapNotNull { it.toDomainOrNull() } }
+            .flowOn(Dispatchers.Default)
     }
 
     /** ID 指定で1件取得する。 */
     override fun getById(id: Long): Flow<Credential?> {
-        return credentialDao.getById(id).map { entity -> entity?.toDomainOrNull() }
+        return credentialDao.getById(id)
+            .map { entity -> entity?.toDomainOrNull() }
+            .flowOn(Dispatchers.Default)
     }
 
     /** サービス名で検索する。 */
     override fun search(query: String): Flow<List<Credential>> {
-        return credentialDao.searchByServiceName(query).map { list -> list.mapNotNull { it.toDomainOrNull() } }
+        return credentialDao.searchByServiceName(query)
+            .map { list -> list.mapNotNull { it.toDomainOrNull() } }
+            .flowOn(Dispatchers.Default)
     }
 
     /** カテゴリで取得する。 */
     override fun getByCategory(category: String): Flow<List<Credential>> {
-        return credentialDao.getByCategory(category).map { list -> list.mapNotNull { it.toDomainOrNull() } }
+        return credentialDao.getByCategory(category)
+            .map { list -> list.mapNotNull { it.toDomainOrNull() } }
+            .flowOn(Dispatchers.Default)
     }
 
     /** お気に入りのみ取得する。 */
     override fun getFavorites(): Flow<List<Credential>> {
-        return credentialDao.getFavorites().map { list -> list.mapNotNull { it.toDomainOrNull() } }
+        return credentialDao.getFavorites()
+            .map { list -> list.mapNotNull { it.toDomainOrNull() } }
+            .flowOn(Dispatchers.Default)
     }
 
     /** 件数を取得する。 */
