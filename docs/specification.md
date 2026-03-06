@@ -1,6 +1,6 @@
 # SecureVault 仕様書
 
-最終更新: 2026-03-06 12:19:07 +09:00
+最終更新: 2026-03-06 13:08:58 +09:00
 
 ## 1. アプリ概要
 - アプリ名: SecureVault（Android パスワードマネージャー）
@@ -72,6 +72,11 @@
   - 実装済み: `AuthScreen` 認証連携、`NavGraph` ロック時遷移ガード
   - 実装済み: `CryptoEngineTest`（1件、成功）
   - 未完了: 設定画面からの自動ロック秒数変更連携、詳細な認証失敗UX調整
+- Phase 2: 完了
+  - 実装済み: `CredentialEntity`, `CredentialDao`, `SecureVaultDatabase`
+  - 実装済み: `DbKeyManager` による DB パスフレーズ管理
+  - 実装済み: `CredentialRepository` / `CredentialRepositoryImpl`
+  - 実装済み: `DatabaseModule`（Room + SQLCipher + Repository DI）
 
 ## 10. 開発運用ルール（ストレージ）
 - 一時データと作業用キャッシュは `D:\temp` を優先使用する。
