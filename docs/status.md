@@ -1,11 +1,24 @@
 # 作業状況
 
-最終更新: 2026-03-06 16:25:51 +09:00
+最終更新: 2026-03-06 16:50:32 +09:00
 
 ## 現在のフェーズ
 - Phase 6（Export/Import・テスト・最終調整）実装完了 / Release検証完了 / 実機QA進行中
 
 ## 本セッションで完了した作業
+- Phase 6 指示更新（他サービスCSVインポート対応）を実装
+  - 追加: `data/backup/ImportSource.kt`, `CsvImportParser.kt`
+  - 改修: `BackupManager.kt`（`importFromService` 追加、CSVパーサー共通化）
+  - 改修: `BackupViewModel.kt`（`importFromService` 呼び出し追加）
+  - 改修: `BackupScreen.kt`（サービス選択ダイアログ、他サービスCSV導線、重複戦略適用）
+  - 改修: `strings.xml`（他サービスインポート文言、無効フォーマット文言追加）
+  - 追加テスト: `CsvImportParserTest.kt`
+  - 改修: `PasswordStrengthChecker.kt`（ブラックリスト判定を完全一致化）
+  - 改修: `PasswordStrengthCheckerTest.kt`（`password -> WEAK` 等の新期待値へ調整）
+- 指示更新反映後の再検証
+  - ビルド/テスト: `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest` 成功
+  - Release ビルド: `./gradlew :app:assembleRelease` 成功
+  - エラーチェック: `get_errors` でエラー 0 件
 - Phase 6（Export/Import・テスト・最終調整）を実装
   - 追加: `data/backup/BackupCredential.kt`, `BackupCrypto.kt`, `BackupManager.kt`
   - 追加: `ui/screen/backup/BackupScreen.kt`, `BackupViewModel.kt`
@@ -160,6 +173,7 @@
 - `daemon` 実行時にネイティブメモリ不足でクラッシュする場合がある（`--no-daemon` では成功）
 - いくつかの Compose/Autofill API で deprecation 警告あり（現時点はビルド成功を優先して維持）
 - `lintVitalAnalyzeRelease` が `NullSafeMutableLiveData` で内部クラッシュするケースがあり、当面は lint 無効化で回避
+- Samsung Pass は標準CSVエクスポート導線がないため、直接インポート対象外
 
 ## 対応方針
 - ビルド時は `GRADLE_USER_HOME` と `TEMP` を D ドライブへ退避して継続
@@ -168,6 +182,6 @@
 - 一時データ保存先は継続して `D:\temp` を標準運用
 
 ## 次の実施項目
-1. 実機で認証後に `設定 -> バックアップ・復元` 画面へ遷移し、暗号化エクスポート/インポートの手動E2Eを確認
-2. CSV エクスポート警告表示と、CSV インポート時のフォーマット耐性を確認
-3. 実機QA結果を `docs/specification.md` / `docs/status.md` に反映
+1. 実機で `設定 -> バックアップ・復元` から、Brave/Bitwarden CSV を使った他サービスインポートの手動E2Eを確認
+2. 暗号化バックアップ復元・SecureVault CSV復元・重複戦略（スキップ/上書き/すべて追加）を端末上で確認
+3. 実機検証スクリーンショットを追加し、結果を `docs/specification.md` / `docs/status.md` に反映

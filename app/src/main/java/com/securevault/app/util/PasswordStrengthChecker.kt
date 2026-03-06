@@ -34,8 +34,8 @@ object PasswordStrengthChecker {
         }
 
         val normalized = password.lowercase()
-        if (blacklist.any { normalized.contains(it) }) {
-            return PasswordStrength.VERY_WEAK
+        if (blacklist.contains(normalized)) {
+            return PasswordStrength.WEAK
         }
 
         val lengthScore = when {

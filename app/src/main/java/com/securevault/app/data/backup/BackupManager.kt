@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import android.util.Base64
 import com.securevault.app.data.repository.CredentialRepository
-import com.securevault.app.data.repository.model.Credential
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -27,6 +26,7 @@ import org.json.JSONObject
 @Singleton
 class BackupManager @Inject constructor(
     private val credentialRepository: CredentialRepository,
+    private val csvImportParser: CsvImportParser,
     @ApplicationContext private val context: Context
 ) {
 
@@ -125,40 +125,22 @@ class BackupManager @Inject constructor(
      * CSV ファイルから認証情報をインポートする。
      */
     suspend fun importCsv(inputUri: Uri): Int = withContext(Dispatchers.IO) {
-        val lines = context.contentResolver.openInputStream(inputUri)?.use { inputStream ->
-            BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8)).use { reader ->
-                reader.readLines()
-            }
-        } ?: throw java.io.IOException("入力ストリームを開けませんでした")
+        val csvContent = readTextFromUri(inputUri)
+        val backupList = csvImportParser.parse(csvContent, ImportSource.SECUREVAULT)
+        importCredentials(backupList, ImportStrategy.IMPORT_ALL)
+    }
 
-        var importCount = 0
-        val dataLines = if (lines.isNotEmpty() && lines[0].trim().lowercase().startsWith("servicename")) {
-            lines.drop(1)
-        } else {
-            lines
-        }
-
-        for (line in dataLines) {
-            if (line.isBlank()) continue
-            val fields = parseCsvLine(line)
-            if (fields.size < 4) continue
-
-            val credential = BackupCredential(
-                serviceName = fields[0],
-                serviceUrl = fields.getOrElse(1) { "" }.ifBlank { null },
-                username = fields[2],
-                password = fields[3],
-                notes = fields.getOrElse(4) { "" }.ifBlank { null },
-                category = fields.getOrElse(5) { "other" }.ifBlank { "other" },
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis()
-            ).toCredential()
-
-            credentialRepository.save(credential)
-            importCount++
-        }
-
-        importCount
+    /**
+     * 対応サービスの CSV ファイルから認証情報をインポートする。
+     */
+    suspend fun importFromService(
+        inputUri: Uri,
+        source: ImportSource,
+        strategy: ImportStrategy
+    ): Int = withContext(Dispatchers.IO) {
+        val csvContent = readTextFromUri(inputUri)
+        val backupList = csvImportParser.parse(csvContent, source)
+        importCredentials(backupList, strategy)
     }
 
     /**
@@ -212,6 +194,14 @@ class BackupManager @Inject constructor(
         return importCount
     }
 
+    private fun readTextFromUri(inputUri: Uri): String {
+        return context.contentResolver.openInputStream(inputUri)?.use { inputStream ->
+            BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8)).use { reader ->
+                reader.readText()
+            }
+        } ?: throw java.io.IOException("入力ストリームを開けませんでした")
+    }
+
     /**
      * CSV フィールドをエスケープする。
      */
@@ -223,39 +213,6 @@ class BackupManager @Inject constructor(
         }
     }
 
-    /**
-     * CSV 1 行をフィールド配列へパースする。
-     */
-    private fun parseCsvLine(line: String): List<String> {
-        val fields = mutableListOf<String>()
-        val current = StringBuilder()
-        var inQuotes = false
-        var i = 0
-
-        while (i < line.length) {
-            val ch = line[i]
-            when {
-                ch == '"' && !inQuotes -> inQuotes = true
-                ch == '"' && inQuotes -> {
-                    if (i + 1 < line.length && line[i + 1] == '"') {
-                        current.append('"')
-                        i++
-                    } else {
-                        inQuotes = false
-                    }
-                }
-                ch == ',' && !inQuotes -> {
-                    fields.add(current.toString())
-                    current.clear()
-                }
-                else -> current.append(ch)
-            }
-            i++
-        }
-        fields.add(current.toString())
-
-        return fields
-    }
 }
 
 /**

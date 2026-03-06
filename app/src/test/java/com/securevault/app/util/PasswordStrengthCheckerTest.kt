@@ -28,12 +28,12 @@ class PasswordStrengthCheckerTest {
     }
 
     /**
-     * ブラックリスト単語を含むパスワードが VERY_WEAK と判定されることを検証する。
+     * ブラックリスト単語を含むパスワードが WEAK と判定されることを検証する。
      */
     @Test
-    fun `blacklisted word password returns VERY_WEAK`() {
+    fun `blacklisted word password returns WEAK`() {
         val result = PasswordStrengthChecker.check("password")
-        assertEquals(PasswordStrength.VERY_WEAK, result)
+        assertEquals(PasswordStrength.WEAK, result)
     }
 
     /**
@@ -41,7 +41,7 @@ class PasswordStrengthCheckerTest {
      */
     @Test
     fun `mixed case with number returns MEDIUM`() {
-        val result = PasswordStrengthChecker.check("Secure123")
+        val result = PasswordStrengthChecker.check("Password1")
         assertEquals(PasswordStrength.MEDIUM, result)
     }
 

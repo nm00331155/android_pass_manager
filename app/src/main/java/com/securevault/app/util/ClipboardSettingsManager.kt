@@ -1,11 +1,9 @@
 package com.securevault.app.util
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import com.securevault.app.data.store.securitySettingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,10 +16,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-
-private val Context.securitySettingsDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "securevault_security_settings"
-)
 
 /**
  * クリップボード自動クリア秒数の設定を管理する。

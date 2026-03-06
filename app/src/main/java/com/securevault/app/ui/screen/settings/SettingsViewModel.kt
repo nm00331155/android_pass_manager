@@ -1,14 +1,12 @@
 package com.securevault.app.ui.screen.settings
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.securevault.app.data.repository.CredentialRepository
+import com.securevault.app.data.store.securitySettingsDataStore
 import com.securevault.app.util.AutoLockManager
 import com.securevault.app.util.ClipboardSettingsManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -23,10 +21,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-
-private val Context.securitySettingsDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "securevault_security_settings"
-)
 
 /**
  * 設定画面の状態管理を担当する ViewModel。

@@ -42,7 +42,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.securevault.app.R
+import com.securevault.app.data.backup.CsvImportParser
+import com.securevault.app.data.backup.ImportSource
 import com.securevault.app.data.backup.ImportStrategy
+
+private enum class ImportRequestType {
+    ENCRYPTED,
+    SERVICE
+}
 
 /**
  * バックアップ・復元画面。
@@ -60,6 +67,7 @@ fun BackupScreen(
     var showImportPasswordDialog by remember { mutableStateOf(false) }
     var showCsvWarningDialog by remember { mutableStateOf(false) }
     var showStrategyDialog by remember { mutableStateOf(false) }
+    var showServiceSourceDialog by remember { mutableStateOf(false) }
 
     var exportPassword by remember { mutableStateOf("") }
     var exportPasswordConfirm by remember { mutableStateOf("") }
@@ -67,13 +75,17 @@ fun BackupScreen(
     var passwordMismatchError by remember { mutableStateOf(false) }
 
     var selectedStrategy by remember { mutableStateOf(ImportStrategy.SKIP_DUPLICATES) }
+    var selectedImportSource by remember { mutableStateOf(ImportSource.BRAVE) }
 
     var pendingExportUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingEncryptedImportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingServiceImportUri by remember { mutableStateOf<Uri?>(null) }
+    var importRequestType by remember { mutableStateOf(ImportRequestType.ENCRYPTED) }
 
     val exportSuccessFormat = stringResource(R.string.backup_export_success)
     val importSuccessFormat = stringResource(R.string.backup_import_success)
     val errorFormat = stringResource(R.string.backup_error)
+    val invalidImportFormat = stringResource(R.string.backup_import_invalid_format)
 
     val encryptedExportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -94,7 +106,7 @@ fun BackupScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let {
-            pendingImportUri = it
+            pendingEncryptedImportUri = it
             showImportPasswordDialog = true
         }
     }
@@ -103,6 +115,16 @@ fun BackupScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri?.let { viewModel.importCsv(it) }
+    }
+
+    val serviceImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            pendingServiceImportUri = it
+            importRequestType = ImportRequestType.SERVICE
+            showStrategyDialog = true
+        }
     }
 
     LaunchedEffect(uiState) {
@@ -118,7 +140,12 @@ fun BackupScreen(
             }
 
             is BackupUiState.Error -> {
-                snackbarHostState.showSnackbar(String.format(errorFormat, state.message))
+                val detailMessage = if (state.message == CsvImportParser.INVALID_FORMAT_ERROR) {
+                    invalidImportFormat
+                } else {
+                    state.message
+                }
+                snackbarHostState.showSnackbar(String.format(errorFormat, detailMessage))
                 viewModel.resetState()
             }
 
@@ -204,6 +231,14 @@ fun BackupScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.backup_import_csv))
+            }
+
+            OutlinedButton(
+                onClick = { showServiceSourceDialog = true },
+                enabled = uiState !is BackupUiState.InProgress,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.backup_import_service))
             }
         }
     }
@@ -311,6 +346,7 @@ fun BackupScreen(
                 TextButton(
                     onClick = {
                         if (importPassword.isNotEmpty()) {
+                            importRequestType = ImportRequestType.ENCRYPTED
                             showImportPasswordDialog = false
                             showStrategyDialog = true
                         }
@@ -366,8 +402,22 @@ fun BackupScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        pendingImportUri?.let { uri ->
-                            viewModel.importEncrypted(uri, importPassword, selectedStrategy)
+                        when (importRequestType) {
+                            ImportRequestType.ENCRYPTED -> {
+                                pendingEncryptedImportUri?.let { uri ->
+                                    viewModel.importEncrypted(uri, importPassword, selectedStrategy)
+                                }
+                            }
+
+                            ImportRequestType.SERVICE -> {
+                                pendingServiceImportUri?.let { uri ->
+                                    viewModel.importFromService(
+                                        uri = uri,
+                                        source = selectedImportSource,
+                                        strategy = selectedStrategy
+                                    )
+                                }
+                            }
                         }
                         showStrategyDialog = false
                         importPassword = ""
@@ -383,6 +433,54 @@ fun BackupScreen(
                         importPassword = ""
                     }
                 ) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+
+    if (showServiceSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showServiceSourceDialog = false },
+            title = { Text(stringResource(R.string.backup_import_service_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ImportSource.entries.forEach { source ->
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                RadioButton(
+                                    selected = selectedImportSource == source,
+                                    onClick = { selectedImportSource = source }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = source.displayName)
+                            }
+                            Text(
+                                text = stringResource(R.string.backup_import_service_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 40.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showServiceSourceDialog = false
+                        serviceImportLauncher.launch(
+                            arrayOf("text/csv", "text/comma-separated-values", "*/*")
+                        )
+                    }
+                ) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showServiceSourceDialog = false }) {
                     Text(stringResource(android.R.string.cancel))
                 }
             }

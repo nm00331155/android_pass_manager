@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.securevault.app.data.backup.BackupManager
+import com.securevault.app.data.backup.ImportSource
 import com.securevault.app.data.backup.ImportStrategy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -107,6 +108,22 @@ class BackupViewModel @Inject constructor(
             _uiState.value = BackupUiState.InProgress
             runCatching {
                 backupManager.importCsv(uri)
+            }.onSuccess { count ->
+                _uiState.value = BackupUiState.Success(count = count, isExport = false)
+            }.onFailure { throwable ->
+                _uiState.value = BackupUiState.Error(throwable.message ?: "不明なエラー")
+            }
+        }
+    }
+
+    /**
+     * 他サービスの CSV をインポートする。
+     */
+    fun importFromService(uri: Uri, source: ImportSource, strategy: ImportStrategy) {
+        viewModelScope.launch {
+            _uiState.value = BackupUiState.InProgress
+            runCatching {
+                backupManager.importFromService(uri, source, strategy)
             }.onSuccess { count ->
                 _uiState.value = BackupUiState.Success(count = count, isExport = false)
             }.onFailure { throwable ->
