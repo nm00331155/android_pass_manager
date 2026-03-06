@@ -1,6 +1,6 @@
 # SecureVault 仕様書
 
-最終更新: 2026-03-06 14:46:45 +09:00
+最終更新: 2026-03-06 15:48:32 +09:00
 
 ## 1. アプリ概要
 - アプリ名: SecureVault（Android パスワードマネージャー）
@@ -69,6 +69,7 @@
 - Phase 0: 完了
 - Phase 1: 完了
   - 実装済み: `MasterKeyManager`, `CryptoEngine`, `BiometricAuthManager`, `AutoLockManager`
+  - 実装済み: `BiometricAuthManager` は認証成功を `() -> Unit` で通知し、CryptoObject に依存しない設計へ更新
   - 実装済み: `AuthScreen` 認証連携、`NavGraph` ロック時遷移ガード
   - 実装済み: 設定画面からの自動ロック秒数変更連携、認証失敗UXリトライ導線
   - 実装済み: `CryptoEngineTest`（1件、成功）
@@ -93,6 +94,17 @@
   - 実装済み: `SaveInfo` 付与、`autofill_service_config.xml` 互換パッケージ拡張
   - 実装済み: `POST_NOTIFICATIONS` 権限、Transparent テーマ適用
   - 未完了: 実機QAに基づく最終チューニング（検出精度・保存タイミングの微調整）
+- Phase 5: 実装完了（実機QA継続）
+  - 実装済み: `strings.xml` の全面日本語化（指定文言へ置換）
+  - 実装済み: `SmsOtpManager`（`hasOngoingSmsRequest` -> `checkPermissionState` -> `startSmsCodeRetriever`）
+  - 実装済み: `SmsOtpReceiver` + Manifest 連携（`SMS_CODE_RETRIEVED` 受信）
+  - 実装済み: `OtpNotificationListener`（通知本文から OTP 抽出、`OtpManager` 通知）
+  - 実装済み: `ClipboardOtpDetector`（4-8 桁 OTP のクリップボード監視）
+  - 実装済み: `OtpManager`（SMS/通知/クリップボード統合イベント）
+  - 実装済み: `SmsOtpActivity`（OTP 取得結果を `EXTRA_AUTHENTICATION_RESULT` で返却）
+  - 実装済み: `SecureVaultAutofillService` OTP Dataset 追加と SMS 監視起動
+  - 実装済み: `SettingsScreen` / `SettingsViewModel` OTP 設定 3 項目を DataStore 永続化
+  - 未完了: 実機での SMS/通知/クリップボード経路別の詳細 QA
 
 ## 10. リソース更新（UI）
 - ランチャーアイコンを `icon.png` ベースへ差し替え
@@ -102,3 +114,4 @@
 ## 11. 開発運用ルール（ストレージ）
 - 一時データと作業用キャッシュは `D:\temp` を優先使用する。
 - Gradle 実行時は `TEMP/TMP/GRADLE_USER_HOME` を `D:\temp` 系へ固定して C ドライブ圧迫を回避する。
+- インストール補助として `install_debug.bat` を利用可能（ビルド -> `adb install -r` -> 起動確認を自動実行）。

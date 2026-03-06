@@ -33,6 +33,15 @@
             android:name=".service.otp.SmsOtpActivity"
             android:exported="false" />
 
+        <receiver
+            android:name=".service.otp.SmsOtpReceiver"
+            android:exported="true"
+            android:permission="com.google.android.gms.auth.api.phone.permission.SEND">
+            <intent-filter>
+                <action android:name="com.google.android.gms.auth.api.phone.SMS_RETRIEVED" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".service.autofill.SecureVaultAutofillService"
             android:exported="true"

@@ -1,111 +1,138 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SecureVault</string>
-    <string name="autofill_service_name">SecureVault Autofill</string>
+    <string name="autofill_service_name">SecureVault 自動入力</string>
 
-    <string name="auth_title">Authentication Required</string>
-    <string name="auth_subtitle">Unlock with biometrics or device credentials</string>
-    <string name="auth_button">Start Authentication</string>
-    <string name="auth_button_progress">Authenticating...</string>
-    <string name="auth_error">Authentication failed. Please try again.</string>
-    <string name="auth_fallback">Biometric unavailable. Switching to device credential.</string>
-    <string name="auth_unavailable">No authentication method is available on this device.</string>
-    <string name="auth_activity_not_found">Could not initialize authentication screen.</string>
-    <string name="auth_retry">Retry</string>
-    <string name="autofill_auth_title">Unlock SecureVault Autofill</string>
-    <string name="autofill_auth_subtitle">Authenticate to fill your saved credential</string>
-    <string name="autofill_save_channel_name">Autofill saves</string>
-    <string name="autofill_save_channel_description">Notifications shown after saving credentials from Autofill.</string>
-    <string name="autofill_save_notification_title">Credential saved</string>
-    <string name="autofill_save_notification_message">Saved %1$s to SecureVault</string>
+    <!-- 認証画面 -->
+    <string name="auth_title">認証が必要です</string>
+    <string name="auth_subtitle">生体認証または端末認証でロックを解除してください</string>
+    <string name="auth_button">認証を開始</string>
+    <string name="auth_button_progress">認証中…</string>
+    <string name="auth_error">認証に失敗しました。もう一度お試しください。</string>
+    <string name="auth_fallback">生体認証が利用できません。端末認証に切り替えます。</string>
+    <string name="auth_unavailable">この端末では認証機能が利用できません。</string>
+    <string name="auth_activity_not_found">認証画面を初期化できませんでした。</string>
+    <string name="auth_retry">再試行</string>
 
-    <string name="home_title">Passwords</string>
-    <string name="add_edit_title_add">Add Password</string>
-    <string name="add_edit_title_edit">Edit Password</string>
-    <string name="detail_title">Detail</string>
-    <string name="settings_title">Settings</string>
-    <string name="generator_title">Generator</string>
+    <!-- 自動入力 -->
+    <string name="autofill_auth_title">SecureVault のロックを解除</string>
+    <string name="autofill_auth_subtitle">保存済みの認証情報を入力するには認証が必要です</string>
+    <string name="autofill_save_channel_name">自動入力の保存</string>
+    <string name="autofill_save_channel_description">自動入力で認証情報を保存したときに表示される通知です。</string>
+    <string name="autofill_save_notification_title">認証情報を保存しました</string>
+    <string name="autofill_save_notification_message">%1$s を SecureVault に保存しました</string>
 
-    <string name="open_settings">Settings</string>
-    <string name="go_add">Go to Add Screen</string>
-    <string name="go_generator">Go to Generator Screen</string>
-    <string name="go_detail">Go to Detail Screen</string>
-    <string name="back_home">Back to Home</string>
+    <!-- ホーム画面 -->
+    <string name="home_title">パスワード一覧</string>
+    <string name="add_edit_title_add">パスワードを追加</string>
+    <string name="add_edit_title_edit">パスワードを編集</string>
+    <string name="detail_title">詳細</string>
+    <string name="settings_title">設定</string>
+    <string name="generator_title">パスワード生成</string>
 
-    <string name="search_action">Search</string>
-    <string name="search_placeholder">Search by service name or username</string>
-    <string name="password_count">%1$d passwords</string>
-    <string name="home_empty_message">Add your first password</string>
-    <string name="home_filter_empty_message">No password matched your filter</string>
-    <string name="filter_reset">Reset Filters</string>
-    <string name="home_swipe_hint">Swipe right: Favorite / left: Delete</string>
+    <!-- ナビゲーション -->
+    <string name="open_settings">設定</string>
+    <string name="go_add">追加画面へ</string>
+    <string name="go_generator">生成画面へ</string>
+    <string name="go_detail">詳細画面へ</string>
+    <string name="back_home">ホームへ戻る</string>
 
-    <string name="category_all">All</string>
-    <string name="category_login">Login</string>
-    <string name="category_finance">Finance</string>
-    <string name="category_social">Social</string>
-    <string name="category_other">Other</string>
-    <string name="favorite_only_label">* Favorites</string>
+    <!-- 検索・フィルタ -->
+    <string name="search_action">検索</string>
+    <string name="search_placeholder">サービス名やユーザー名で検索</string>
+    <string name="password_count">%1$d 件のパスワード</string>
+    <string name="home_empty_message">最初のパスワードを追加しましょう</string>
+    <string name="home_filter_empty_message">条件に一致するパスワードはありません</string>
+    <string name="filter_reset">フィルタをリセット</string>
+    <string name="home_swipe_hint">右スワイプ: お気に入り / 左スワイプ: 削除</string>
 
-    <string name="field_service_name_required">Service Name (Required)</string>
+    <!-- カテゴリ -->
+    <string name="category_all">すべて</string>
+    <string name="category_login">ログイン</string>
+    <string name="category_finance">金融</string>
+    <string name="category_social">SNS</string>
+    <string name="category_other">その他</string>
+    <string name="favorite_only_label">★ お気に入り</string>
+
+    <!-- 入力フィールド -->
+    <string name="field_service_name_required">サービス名（必須）</string>
     <string name="field_url">URL</string>
-    <string name="field_username">Username</string>
-    <string name="field_password_required">Password (Required)</string>
-    <string name="field_notes">Notes</string>
-    <string name="field_category">Category</string>
+    <string name="field_username">ユーザー名</string>
+    <string name="field_password_required">パスワード（必須）</string>
+    <string name="field_notes">メモ</string>
+    <string name="field_category">カテゴリ</string>
 
-    <string name="save_action">Save</string>
-    <string name="save_in_progress">Saving...</string>
-    <string name="generate_password_action">Generate Password</string>
-    <string name="show_password">Show</string>
-    <string name="hide_password">Hide</string>
-    <string name="back_label">Back</string>
+    <!-- 保存・操作 -->
+    <string name="save_action">保存</string>
+    <string name="save_in_progress">保存中…</string>
+    <string name="generate_password_action">パスワードを生成</string>
+    <string name="show_password">表示</string>
+    <string name="hide_password">非表示</string>
+    <string name="back_label">戻る</string>
 
-    <string name="edit_action">Edit</string>
-    <string name="copy_action">Copy</string>
-    <string name="delete_action">Delete</string>
-    <string name="open_in_browser">Open in Browser</string>
-    <string name="created_at">Created At</string>
-    <string name="updated_at">Updated At</string>
+    <!-- 詳細画面 -->
+    <string name="edit_action">編集</string>
+    <string name="copy_action">コピー</string>
+    <string name="delete_action">削除</string>
+    <string name="open_in_browser">ブラウザで開く</string>
+    <string name="created_at">作成日時</string>
+    <string name="updated_at">更新日時</string>
 
-    <string name="regenerate_action">Regenerate</string>
-    <string name="password_length_label">Length: %1$d</string>
-    <string name="option_lowercase">Lowercase</string>
-    <string name="option_uppercase">Uppercase</string>
-    <string name="option_digits">Digits</string>
-    <string name="option_symbols">Symbols</string>
-    <string name="exclude_ambiguous">Exclude ambiguous characters</string>
-    <string name="use_generated_password">Use this password</string>
+    <!-- パスワード生成 -->
+    <string name="regenerate_action">再生成</string>
+    <string name="password_length_label">文字数: %1$d</string>
+    <string name="option_lowercase">小文字 (a-z)</string>
+    <string name="option_uppercase">大文字 (A-Z)</string>
+    <string name="option_digits">数字 (0-9)</string>
+    <string name="option_symbols">記号 (!@#$…)</string>
+    <string name="exclude_ambiguous">紛らわしい文字を除外</string>
+    <string name="use_generated_password">このパスワードを使う</string>
 
-    <string name="settings_security">Security</string>
-    <string name="settings_auto_lock">Auto lock</string>
-    <string name="settings_clipboard_clear">Clipboard auto clear</string>
-    <string name="settings_data">Data</string>
-    <string name="settings_delete_all">Delete all data</string>
-    <string name="settings_app_info">App Info</string>
-    <string name="settings_version">Version: %1$s</string>
-    <string name="open_autofill_settings">Open Autofill Settings</string>
+    <!-- 設定画面 -->
+    <string name="settings_security">セキュリティ</string>
+    <string name="settings_auto_lock">自動ロック</string>
+    <string name="settings_clipboard_clear">クリップボード自動消去</string>
+    <string name="settings_data">データ管理</string>
+    <string name="settings_delete_all">すべてのデータを削除</string>
+    <string name="settings_app_info">アプリ情報</string>
+    <string name="settings_version">バージョン: %1$s</string>
+    <string name="open_autofill_settings">自動入力の設定を開く</string>
+    <string name="settings_otp">OTP（ワンタイムパスワード）</string>
+    <string name="settings_sms_otp">SMS ワンタイム自動入力</string>
+    <string name="settings_notification_otp">通知からの OTP 読取</string>
+    <string name="settings_clipboard_otp">クリップボードの OTP 検出</string>
 
-    <string name="timeout_immediate">Immediate</string>
-    <string name="timeout_15_seconds">15 sec</string>
-    <string name="timeout_30_seconds">30 sec</string>
-    <string name="timeout_1_minute">1 min</string>
-    <string name="timeout_5_minutes">5 min</string>
-    <string name="timeout_disabled">Disabled</string>
+    <!-- タイムアウト -->
+    <string name="timeout_immediate">即時</string>
+    <string name="timeout_15_seconds">15秒</string>
+    <string name="timeout_30_seconds">30秒</string>
+    <string name="timeout_1_minute">1分</string>
+    <string name="timeout_5_minutes">5分</string>
+    <string name="timeout_disabled">無効</string>
 
-    <string name="password_copied">Password</string>
-    <string name="username_copied">Username</string>
-    <string name="clipboard_auto_clear">Clipboard will clear in %1$d sec</string>
+    <!-- コピー通知 -->
+    <string name="password_copied">パスワード</string>
+    <string name="username_copied">ユーザー名</string>
+    <string name="clipboard_auto_clear">%1$d 秒後にクリップボードを消去します</string>
 
-    <string name="confirm_delete_title">Confirm Delete</string>
-    <string name="confirm_delete_message">Delete this password? This cannot be undone.</string>
-    <string name="confirm_delete_all_title">Delete All Data</string>
-    <string name="confirm_delete_all_message">Delete all passwords? This cannot be undone.</string>
-    <string name="confirm_delete_all_final">Are you sure? This action cannot be reverted.</string>
+    <!-- 確認ダイアログ -->
+    <string name="confirm_delete_title">削除の確認</string>
+    <string name="confirm_delete_message">このパスワードを削除しますか？この操作は取り消せません。</string>
+    <string name="confirm_delete_all_title">全データの削除</string>
+    <string name="confirm_delete_all_message">すべてのパスワードを削除しますか？この操作は取り消せません。</string>
+    <string name="confirm_delete_all_final">本当に削除してよろしいですか？元に戻すことはできません。</string>
+    <string name="confirm_yes">はい</string>
+    <string name="confirm_no">いいえ</string>
 
-    <string name="strength_very_weak">Very Weak</string>
-    <string name="strength_weak">Weak</string>
-    <string name="strength_medium">Medium</string>
-    <string name="strength_strong">Strong</string>
-    <string name="strength_very_strong">Very Strong</string>
+    <!-- パスワード強度 -->
+    <string name="strength_very_weak">非常に弱い</string>
+    <string name="strength_weak">弱い</string>
+    <string name="strength_medium">普通</string>
+    <string name="strength_strong">強い</string>
+    <string name="strength_very_strong">非常に強い</string>
+
+    <!-- OTP -->
+    <string name="otp_sms_suggestion">SMS から認証コードを自動入力</string>
+    <string name="otp_detected">認証コードを検出しました: %1$s</string>
+    <string name="otp_clipboard_detected">クリップボードから認証コードを検出しました</string>
 </resources>

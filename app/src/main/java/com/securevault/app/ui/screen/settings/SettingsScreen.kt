@@ -3,11 +3,13 @@ package com.securevault.app.ui.screen.settings
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -39,6 +42,9 @@ import com.securevault.app.BuildConfig
 import com.securevault.app.R
 import com.securevault.app.ui.component.ConfirmDialog
 
+/**
+ * 設定画面を表示し、セキュリティ設定と OTP 設定の変更を受け付ける。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -48,6 +54,9 @@ fun SettingsScreen(
     val context = LocalContext.current
     val autoLockTimeout by viewModel.autoLockTimeoutSeconds.collectAsStateWithLifecycle()
     val clipboardTimeout by viewModel.clipboardClearTimeoutSeconds.collectAsStateWithLifecycle()
+    val otpSmsEnabled by viewModel.otpSmsEnabled.collectAsStateWithLifecycle()
+    val otpNotificationEnabled by viewModel.otpNotificationEnabled.collectAsStateWithLifecycle()
+    val otpClipboardEnabled by viewModel.otpClipboardEnabled.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
@@ -112,6 +121,37 @@ fun SettingsScreen(
                 currentValue = clipboardTimeout,
                 options = clipboardOptions,
                 onSelect = viewModel::updateClipboardClearTimeoutSeconds
+            )
+
+            Text(
+                text = stringResource(R.string.settings_otp),
+                style = MaterialTheme.typography.titleMedium
+            )
+            SettingToggleRow(
+                label = stringResource(R.string.settings_sms_otp),
+                checked = otpSmsEnabled,
+                onCheckedChange = viewModel::updateOtpSmsEnabled
+            )
+            SettingToggleRow(
+                label = stringResource(R.string.settings_notification_otp),
+                checked = otpNotificationEnabled,
+                onCheckedChange = { enabled ->
+                    viewModel.updateOtpNotificationEnabled(enabled)
+                    if (enabled && !isNotificationListenerEnabled(context)) {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            )
+                        }
+                    }
+                }
+            )
+            SettingToggleRow(
+                label = stringResource(R.string.settings_clipboard_otp),
+                checked = otpClipboardEnabled,
+                onCheckedChange = viewModel::updateOtpClipboardEnabled
             )
 
             Button(
@@ -197,3 +237,38 @@ private fun TimeoutOptionRow(
         }
     }
 }
+
+@Composable
+private fun SettingToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp)
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.width(56.dp)
+        )
+    }
+}
+
+private fun isNotificationListenerEnabled(context: android.content.Context): Boolean {
+    val enabledListeners = Settings.Secure.getString(
+        context.contentResolver,
+        NOTIFICATION_LISTENER_SETTING_KEY
+    ).orEmpty()
+
+    return enabledListeners.contains(context.packageName)
+}
+
+private const val NOTIFICATION_LISTENER_SETTING_KEY = "enabled_notification_listeners"

@@ -26,6 +26,8 @@ import androidx.core.app.NotificationManagerCompat
 import com.securevault.app.R
 import com.securevault.app.data.repository.CredentialRepository
 import com.securevault.app.data.repository.model.Credential
+import com.securevault.app.service.otp.SmsOtpActivity
+import com.securevault.app.service.otp.SmsOtpManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlin.math.abs
@@ -48,6 +50,9 @@ class SecureVaultAutofillService : AutofillService() {
 
     @Inject
     lateinit var smartFieldDetector: SmartFieldDetector
+
+    @Inject
+    lateinit var smsOtpManager: SmsOtpManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -96,7 +101,7 @@ class SecureVaultAutofillService : AutofillService() {
 
         val targets = smartFieldDetector.detect(structure)
 
-        if (targets.usernameId == null && targets.passwordId == null) {
+        if (targets.usernameId == null && targets.passwordId == null && targets.otpId == null) {
             callback.onSuccess(null)
             return
         }
@@ -104,10 +109,23 @@ class SecureVaultAutofillService : AutofillService() {
         Log.d(TAG, "onFillRequest package=$targetPackageName otpField=${targets.otpId != null}")
 
         val job = serviceScope.launch {
-            val credentials = runCatching {
-                resolveCredentials(targetPackageName, targets.webDomain)
-            }.getOrElse { throwable ->
-                Log.w(TAG, "Failed to resolve autofill credentials", throwable)
+            if (targets.otpId != null) {
+                runCatching {
+                    val status = smsOtpManager.startListening()
+                    Log.d(TAG, "SmsOtpManager start status=$status")
+                }.onFailure { throwable ->
+                    Log.w(TAG, "Failed to start SMS OTP listener", throwable)
+                }
+            }
+
+            val credentials = if (targets.usernameId != null || targets.passwordId != null) {
+                runCatching {
+                    resolveCredentials(targetPackageName, targets.webDomain)
+                }.getOrElse { throwable ->
+                    Log.w(TAG, "Failed to resolve autofill credentials", throwable)
+                    emptyList()
+                }
+            } else {
                 emptyList()
             }
 
@@ -229,6 +247,17 @@ class SecureVaultAutofillService : AutofillService() {
             }
         }
 
+        targets.otpId?.let { otpId ->
+            val otpDatasetBuilder = Dataset.Builder(createOtpPresentation())
+            otpDatasetBuilder.setValue(otpId, null)
+
+            val otpAuthIntent = createOtpAuthenticationPendingIntent(otpId)
+            otpDatasetBuilder.setAuthentication(otpAuthIntent.intentSender)
+
+            responseBuilder.addDataset(otpDatasetBuilder.build())
+            hasDataset = true
+        }
+
         return if (hasDataset || saveInfo != null) responseBuilder.build() else null
     }
 
@@ -236,6 +265,12 @@ class SecureVaultAutofillService : AutofillService() {
         return RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
             setTextViewText(R.id.service_name, credential.serviceName)
             setTextViewText(R.id.username, credential.username)
+        }
+    }
+
+    private fun createOtpPresentation(): RemoteViews {
+        return RemoteViews(packageName, R.layout.autofill_otp_item).apply {
+            setTextViewText(R.id.label, getString(R.string.otp_sms_suggestion))
         }
     }
 
@@ -253,6 +288,19 @@ class SecureVaultAutofillService : AutofillService() {
         return PendingIntent.getActivity(
             this,
             credentialId.toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun createOtpAuthenticationPendingIntent(otpId: AutofillId): PendingIntent {
+        val intent = Intent(this, SmsOtpActivity::class.java).apply {
+            putExtra(SmsOtpActivity.EXTRA_OTP_AUTOFILL_ID, otpId)
+        }
+
+        return PendingIntent.getActivity(
+            this,
+            OTP_REQUEST_CODE_BASE + abs(otpId.hashCode()),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -453,5 +501,6 @@ class SecureVaultAutofillService : AutofillService() {
         const val SAVE_FAILURE_MESSAGE = "保存に失敗しました"
         const val AUTOFILL_SAVE_CHANNEL_ID = "autofill_save"
         const val SAVE_NOTIFICATION_BASE_ID = 12000
+        const val OTP_REQUEST_CODE_BASE = 20000
     }
 }

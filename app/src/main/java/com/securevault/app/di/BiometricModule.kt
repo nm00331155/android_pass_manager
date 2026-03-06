@@ -1,7 +1,6 @@
 package com.securevault.app.di
 
 import com.securevault.app.biometric.BiometricAuthManager
-import com.securevault.app.data.crypto.CryptoEngine
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,9 +16,7 @@ object BiometricModule {
 
     @Provides
     @Singleton
-    fun provideBiometricAuthManager(
-        cryptoEngine: CryptoEngine
-    ): BiometricAuthManager {
-        return BiometricAuthManager(cryptoEngine)
+    fun provideBiometricAuthManager(): BiometricAuthManager {
+        return BiometricAuthManager()
     }
 }

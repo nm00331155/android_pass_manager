@@ -5,11 +5,9 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import com.securevault.app.data.crypto.CryptoEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import javax.crypto.Cipher
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,9 +15,7 @@ import javax.inject.Singleton
  * BiometricPrompt を用いた認証処理を管理し、Compose から扱える状態を提供する。
  */
 @Singleton
-class BiometricAuthManager @Inject constructor(
-    private val cryptoEngine: CryptoEngine
-) {
+class BiometricAuthManager @Inject constructor() {
 
     private val _authState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val authState: StateFlow<AuthUiState> = _authState.asStateFlow()
@@ -51,7 +47,7 @@ class BiometricAuthManager @Inject constructor(
         activity: FragmentActivity,
         title: String,
         subtitle: String,
-        onSuccess: (Cipher) -> Unit,
+        onSuccess: () -> Unit,
         onError: (String) -> Unit,
         onFallback: () -> Unit
     ) {
@@ -88,17 +84,8 @@ class BiometricAuthManager @Inject constructor(
             ContextCompat.getMainExecutor(activity),
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    val cipher = result.cryptoObject?.cipher ?: runCatching {
-                        cryptoEngine.getCipherForEncryption()
-                    }.getOrElse { error ->
-                        val message = error.message ?: "認証後の暗号初期化に失敗しました。"
-                        _authState.value = AuthUiState.Error(message)
-                        onError(message)
-                        return
-                    }
-
                     _authState.value = AuthUiState.Success
-                    onSuccess(cipher)
+                    onSuccess()
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -114,24 +101,7 @@ class BiometricAuthManager @Inject constructor(
         )
 
         _authState.value = AuthUiState.Authenticating
-        if (authenticators == BiometricManager.Authenticators.DEVICE_CREDENTIAL) {
-            prompt.authenticate(promptInfo)
-            return
-        }
-
-        val cipher = runCatching { cryptoEngine.getCipherForEncryption() }
-            .getOrElse { error ->
-                val message = error.message ?: "暗号化初期化に失敗しました。"
-                _authState.value = AuthUiState.Error(message)
-                onError(message)
-                return
-            }
-
-        runCatching {
-            prompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
-        }.onFailure {
-            prompt.authenticate(promptInfo)
-        }
+        prompt.authenticate(promptInfo)
     }
 
     /**

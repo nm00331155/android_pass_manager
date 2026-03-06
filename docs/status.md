@@ -1,11 +1,39 @@
 # 作業状況
 
-最終更新: 2026-03-06 14:46:45 +09:00
+最終更新: 2026-03-06 15:52:50 +09:00
 
 ## 現在のフェーズ
-- Phase 3（コアUI）実装完了 / Phase 4（Autofill本実装）進行中
+- Phase 5（日本語化 + OTP 自動入力）実装完了 / 実機QA進行中
 
 ## 本セッションで完了した作業
+- Phase 5（日本語化 + OTP 自動入力）を実装
+  - `res/values/strings.xml` を指定内容で全面日本語化（英語UI文言を除去）
+  - 新規追加: `SmsOtpManager`, `SmsOtpReceiver`, `ClipboardOtpDetector`, `OtpManager`, `OtpModule`
+  - 改修: `OtpNotificationListener`（本実装 + Hilt 連携 + Android 15 制約コメント）
+  - 改修: `SmsOtpActivity`（SMS Code Retriever 起動、Broadcast 受信、OTP Dataset 返却）
+  - 改修: `SecureVaultAutofillService`（OTP フィールド検出時の SMS リスナー開始、OTP Dataset 追加）
+  - 改修: `SettingsViewModel` / `SettingsScreen`（OTP 3スイッチ + DataStore 保存）
+  - 改修: `AndroidManifest.xml`（`SmsOtpReceiver` 追加）
+- Phase 5 実装後の検証
+  - ビルド: `./gradlew --no-daemon :app:assembleDebug` 成功
+  - テスト: `./gradlew --no-daemon :app:testDebugUnitTest` 成功
+  - エラーチェック: `get_errors` でエラー 0 件
+  - 実機反映: `install_debug.bat` 実行成功
+  - 端末反映: `lastUpdateTime=2026-03-06 15:51:02`
+  - スクリーンショット: `docs/screenshots/securevault_phase5_auth.png` を追加
+- Biometric 認証フローを Cipher 非依存へ修正
+  - `BiometricAuthManager.authenticate()` の `onSuccess` を `() -> Unit` 化
+  - `onAuthenticationSucceeded` で Cipher 取得処理を削除し、認証成功のみを通知
+  - `prompt.authenticate(promptInfo)` へ統一し、CryptoObject の利用を廃止
+  - `BiometricModule` を新コンストラクタ定義へ更新
+- インストール運用を補助する BAT を追加
+  - 追加: `install_debug.bat`
+  - 実行内容: 端末確認 -> `:app:assembleDebug` -> `adb install -r` -> 起動確認 -> `lastUpdateTime` 表示
+- Biometric 修正後の再検証
+  - ビルド: `./gradlew --no-daemon :app:assembleDebug` 成功
+  - テスト: `./gradlew --no-daemon :app:testDebugUnitTest` 成功
+  - `install_debug.bat` 実行成功
+  - 端末反映: `lastUpdateTime=2026-03-06 15:17:11`
 - Phase 4 実装を継続
   - 追加: `SmartFieldDetector`
     - `autofillHints` / HTML属性 / idEntry・hint文言 / InputType を組み合わせた3段階検出
@@ -108,7 +136,7 @@
   - 端末反映: `lastUpdateTime=2026-03-06 14:46:07`
 
 ## 進行中の作業
-- Phase 4 の実機QA（Autofill候補表示、認証経由入力、保存ダイアログ動作の詳細確認）
+- Phase 5 の実機QA（SMS/通知/クリップボードの OTP 検出と Autofill 反映の詳細確認）
 
 ## 検出した課題
 - VS Code 側の `get_errors` は旧 AGP (`9.0.1`) キャッシュ参照が残る
@@ -123,6 +151,6 @@
 - 一時データ保存先は継続して `D:\temp` を標準運用
 
 ## 次の実施項目
-1. 実機で Autofill 認証経由入力（Chrome 等）を手動確認し、必要なら検出キーワードを微調整
-2. 保存通知の権限フロー（Android 13+）と onSave 発火条件を追加検証
-3. UI/API 警告の順次解消（SearchBar / SwipeToDismiss / menuAnchor / Autofill deprecation など）
+1. 実機で SMS 到着時の OTP Dataset 反映を検証（対象アプリ入力欄での自動入力挙動確認）
+2. 通知読取権限 ON/OFF 時の `OtpNotificationListener` 動作を確認
+3. クリップボード OTP 検出 ON/OFF と誤検知率を確認
