@@ -197,7 +197,7 @@ class BackupManager @Inject constructor(
     private fun readTextFromUri(inputUri: Uri): String {
         return context.contentResolver.openInputStream(inputUri)?.use { inputStream ->
             BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8)).use { reader ->
-                reader.readText()
+                reader.readText().removePrefix("\uFEFF")
             }
         } ?: throw java.io.IOException("入力ストリームを開けませんでした")
     }

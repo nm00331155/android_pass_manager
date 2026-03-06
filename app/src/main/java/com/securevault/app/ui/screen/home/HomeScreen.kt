@@ -15,13 +15,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DockedSearchBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -33,12 +37,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,17 +71,13 @@ fun HomeScreen(
     val showFavoritesOnly by viewModel.showFavoritesOnly.collectAsStateWithLifecycle()
     val credentialCount by viewModel.credentialCount.collectAsStateWithLifecycle()
 
-    var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Credential?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(text = "SecureVault") },
+                title = { Text(text = stringResource(R.string.app_name)) },
                 actions = {
-                    TextButton(onClick = { searchExpanded = !searchExpanded }) {
-                        Text(text = stringResource(R.string.search_action))
-                    }
                     TextButton(onClick = onGeneratorClick) {
                         Text(text = stringResource(R.string.generator_title))
                     }
@@ -96,17 +100,23 @@ fun HomeScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            if (searchExpanded) {
-                DockedSearchBar(
-                    query = searchQuery,
-                    onQueryChange = viewModel::updateSearchQuery,
-                    onSearch = {},
-                    active = searchExpanded,
-                    onActiveChange = { searchExpanded = it },
-                    placeholder = { Text(text = stringResource(R.string.search_placeholder)) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {}
-            }
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = viewModel::updateSearchQuery,
+                placeholder = { Text(text = stringResource(R.string.search_placeholder)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = stringResource(R.string.search_action)
+                            )
+                        }
+                    }
+                }
+            )
 
             CategoryFilterRow(
                 selectedCategory = selectedCategory,
@@ -132,11 +142,16 @@ fun HomeScreen(
                 }
 
                 HomeUiState.Empty -> {
-                    EmptyState(
-                        message = stringResource(R.string.home_empty_message),
-                        actionLabel = stringResource(R.string.go_add),
-                        onAction = onAddClick
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_empty_message),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 is HomeUiState.Error -> {
@@ -203,6 +218,7 @@ fun HomeScreen(
                                     content = {
                                         CredentialListItem(
                                             credential = credential,
+                                            searchQuery = searchQuery,
                                             onClick = { onDetailClick(credential.id) }
                                         )
                                     }
@@ -266,6 +282,7 @@ private fun CategoryFilterRow(
 @Composable
 private fun CredentialListItem(
     credential: Credential,
+    searchQuery: String,
     onClick: () -> Unit
 ) {
     Row(
@@ -282,12 +299,14 @@ private fun CredentialListItem(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
+            HighlightedText(
                 text = credential.serviceName,
+                highlight = searchQuery,
                 style = MaterialTheme.typography.titleSmall
             )
-            Text(
+            HighlightedText(
                 text = credential.username,
+                highlight = searchQuery,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -300,6 +319,40 @@ private fun CredentialListItem(
 
         Text(text = if (credential.isFavorite) "*" else "-")
     }
+}
+
+@Composable
+private fun HighlightedText(
+    text: String,
+    highlight: String,
+    style: TextStyle,
+    color: Color = Color.Unspecified
+) {
+    val normalizedHighlight = highlight.trim()
+    if (normalizedHighlight.isBlank()) {
+        Text(text = text, style = style, color = color)
+        return
+    }
+
+    val lowerText = text.lowercase()
+    val lowerHighlight = normalizedHighlight.lowercase()
+    val annotated = buildAnnotatedString {
+        var start = 0
+        while (start < text.length) {
+            val index = lowerText.indexOf(lowerHighlight, startIndex = start)
+            if (index < 0) {
+                append(text.substring(start))
+                break
+            }
+            append(text.substring(start, index))
+            withStyle(SpanStyle(background = Color.Yellow)) {
+                append(text.substring(index, index + lowerHighlight.length))
+            }
+            start = index + lowerHighlight.length
+        }
+    }
+
+    Text(text = annotated, style = style, color = color)
 }
 
 @Composable

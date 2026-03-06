@@ -1,5 +1,6 @@
 package com.securevault.app.data.backup
 
+import android.util.Log
 import java.net.URI
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,6 +16,7 @@ class CsvImportParser @Inject constructor() {
      */
     companion object {
         const val INVALID_FORMAT_ERROR = "INVALID_IMPORT_FORMAT"
+        private const val TAG = "CsvImportParser"
     }
 
     /**
@@ -28,9 +30,15 @@ class CsvImportParser @Inject constructor() {
             return emptyList()
         }
 
-        val headerFields = parseCsvLine(rows.first())
+        val headerRow = rows.first().removePrefix("\uFEFF")
+        val headerFields = parseCsvLine(headerRow)
             .map { it.trim().removePrefix("\uFEFF") }
         val normalizedHeaders = headerFields.map(::normalizeColumnName)
+
+        debugLog("Header fields: $headerFields")
+        debugLog("Normalized headers: $normalizedHeaders")
+        debugLog("Row count (excluding header): ${rows.size - 1}")
+
         if (normalizedHeaders.none { it.contains("password") }) {
             throw IllegalArgumentException(INVALID_FORMAT_ERROR)
         }
@@ -189,9 +197,14 @@ class CsvImportParser @Inject constructor() {
         return columnName
             .trim()
             .removePrefix("\uFEFF")
+            .removeSurrounding("\"")
             .lowercase()
             .replace(" ", "")
             .replace("_", "")
+    }
+
+    private fun debugLog(message: String) {
+        runCatching { Log.d(TAG, message) }
     }
 
     private fun resolveServiceName(

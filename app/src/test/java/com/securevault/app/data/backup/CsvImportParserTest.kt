@@ -180,6 +180,20 @@ class CsvImportParserTest {
     }
 
     @Test
+    fun `quoted header with BOM is parsed correctly`() {
+        val csv = "\uFEFF\"name\",\"url\",\"username\",\"password\",\"note\"\nGitHub,https://github.com,user1,pass1,memo"
+
+        val result = parser.parse(csv, ImportSource.CHROME)
+
+        assertEquals(1, result.size)
+        assertEquals("GitHub", result[0].serviceName)
+        assertEquals("https://github.com", result[0].serviceUrl)
+        assertEquals("user1", result[0].username)
+        assertEquals("pass1", result[0].password)
+        assertEquals("memo", result[0].notes)
+    }
+
+    @Test
     fun `missing required column throws IllegalArgumentException`() {
         val csv = """
             name,url,username,note
