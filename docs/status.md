@@ -1,6 +1,6 @@
 # 作業状況
 
-最終更新: 2026-03-06 11:26:05 +09:00
+最終更新: 2026-03-06 12:19:07 +09:00
 
 ## 現在のフェーズ
 - Phase 1（暗号化基盤・生体認証）実装中
@@ -30,19 +30,33 @@
   - `adb` で `no devices/emulators found` を検出
   - 30秒待機後に再確認しても端末未検出
   - 原因候補: USB切断/デバッグ許可解除/端末側の接続状態変化
+- 一時データの保存先を `D:\temp` に固定
+  - `gradlew.bat` に `TEMP/TMP/GRADLE_USER_HOME` の固定化を追加
+  - `gradlew`（MSYS/Cygwin）にも同等設定を追加
+  - `gradle.properties` に `-Djava.io.tmpdir=D:/temp` を追加
+  - メモリ安定化のため `org.gradle.jvmargs` を `-Xmx2048m` へ調整
+  - `D:\temp\.gradle-user-home` への生成を確認
+  - `--no-daemon :app:assembleDebug` 成功を確認
+- 端末再接続後に最終 `adb` 更新を再実施
+  - `adb devices` で端末 `RFCY2094T0V` を再認識
+  - `adb shell am force-stop com.securevault.app`
+  - `adb install -r app/build/outputs/apk/debug/app-debug.apk` 成功
+  - `adb shell monkey -p com.securevault.app ...` 起動確認
+  - `lastUpdateTime=2026-03-06 12:19:00`
 
 ## 進行中の作業
 - Phase 1 残タスク（設定画面からの自動ロック秒数変更UI、認証失敗UXの調整）
-- ADB 端末再接続後の最終更新再実施
 
 ## 検出した課題
 - VS Code 側の `get_errors` は旧 AGP (`9.0.1`) キャッシュ参照が残る
 - Cドライブ空き不足により依存変換タスクが失敗
+- `daemon` 実行時にネイティブメモリ不足でクラッシュする場合がある（`--no-daemon` では成功）
 
 ## 対応方針
 - ビルド時は `GRADLE_USER_HOME` と `TEMP` を D ドライブへ退避して継続
 - `gradlew` 経由の実ビルド結果を正として運用
 - 以降も作業終了時に `adb force-stop + install -r` を継続
+- 一時データ保存先は継続して `D:\temp` を標準運用
 
 ## 次の実施項目
 1. Phase 1 残タスクの実装（自動ロック設定UI連携、認証UXの微調整）
