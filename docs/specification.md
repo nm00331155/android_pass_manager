@@ -1,6 +1,6 @@
 # SecureVault 仕様書
 
-最終更新: 2026-03-06 15:48:32 +09:00
+最終更新: 2026-03-06 16:25:51 +09:00
 
 ## 1. アプリ概要
 - アプリ名: SecureVault（Android パスワードマネージャー）
@@ -105,6 +105,18 @@
   - 実装済み: `SecureVaultAutofillService` OTP Dataset 追加と SMS 監視起動
   - 実装済み: `SettingsScreen` / `SettingsViewModel` OTP 設定 3 項目を DataStore 永続化
   - 未完了: 実機での SMS/通知/クリップボード経路別の詳細 QA
+- Phase 6: 実装完了（実機QA継続）
+  - 実装済み: `BackupManager`（暗号化JSON `.securevault` / CSV の Export・Import）
+  - 実装済み: `BackupCrypto`（PBKDF2WithHmacSHA256 600,000 iterations + AES-256-GCM）
+  - 実装済み: `BackupCredential`（バックアップモデルとドメインモデルの相互変換）
+  - 実装済み: `BackupScreen` / `BackupViewModel`（SAF 選択、パスワード入力、重複戦略）
+  - 実装済み: `NavRoutes` / `NavGraph` / `SettingsScreen` のバックアップ導線追加
+  - 実装済み: `strings.xml` バックアップ関連文言追加
+  - 実装済み: `Theme.kt` の dynamic color 対応
+  - 実装済み: `proguard-rules.pro` の SQLCipher/Tink/Room/Serialization/Hilt keep ルール更新
+  - 実装済み: ユニットテスト追加（`BackupCryptoTest`, `BackupManagerTest`, `PasswordStrengthCheckerTest`）
+  - 検証済み: `./gradlew :app:assembleRelease` 成功（`NullSafeMutableLiveData` lint 無効化で lint analyzer クラッシュ回避）
+  - 未完了: 実機で認証後のバックアップE2E（エクスポート/インポート）詳細検証
 
 ## 10. リソース更新（UI）
 - ランチャーアイコンを `icon.png` ベースへ差し替え

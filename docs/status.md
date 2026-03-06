@@ -1,11 +1,27 @@
 # 作業状況
 
-最終更新: 2026-03-06 15:52:50 +09:00
+最終更新: 2026-03-06 16:25:51 +09:00
 
 ## 現在のフェーズ
-- Phase 5（日本語化 + OTP 自動入力）実装完了 / 実機QA進行中
+- Phase 6（Export/Import・テスト・最終調整）実装完了 / Release検証完了 / 実機QA進行中
 
 ## 本セッションで完了した作業
+- Phase 6（Export/Import・テスト・最終調整）を実装
+  - 追加: `data/backup/BackupCredential.kt`, `BackupCrypto.kt`, `BackupManager.kt`
+  - 追加: `ui/screen/backup/BackupScreen.kt`, `BackupViewModel.kt`
+  - 改修: `NavRoutes.kt`, `NavGraph.kt`, `SettingsScreen.kt`（バックアップ導線追加）
+  - 改修: `strings.xml`（バックアップ関連文言を追加）
+  - 改修: `Theme.kt`（Material 3 dynamic color 対応）
+  - 改修: `proguard-rules.pro`（SQLCipher/Tink/Room/Serialization/Hilt keep 追加）
+  - 追加テスト: `BackupCryptoTest.kt`, `BackupManagerTest.kt`, `PasswordStrengthCheckerTest.kt`
+  - 改修: `build.gradle.kts`, `app/build.gradle.kts`, `gradle/libs.versions.toml`（serialization + release最適化 + test依存）
+- Phase 6 実装後の検証
+  - ビルド: `./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest` 成功
+  - ビルド: `./gradlew :app:assembleRelease` 成功（`NullSafeMutableLiveData` lint を disable して lint analyzer クラッシュを回避）
+  - エラーチェック: `get_errors` でエラー 0 件
+  - 実機反映: `install_debug.bat` 実行成功
+  - 端末反映: `lastUpdateTime=2026-03-06 16:15:30`
+  - UI確認: `docs/screenshots/securevault_phase6_current.png` を追加（認証画面まで確認）
 - Phase 5（日本語化 + OTP 自動入力）を実装
   - `res/values/strings.xml` を指定内容で全面日本語化（英語UI文言を除去）
   - 新規追加: `SmsOtpManager`, `SmsOtpReceiver`, `ClipboardOtpDetector`, `OtpManager`, `OtpModule`
@@ -136,13 +152,14 @@
   - 端末反映: `lastUpdateTime=2026-03-06 14:46:07`
 
 ## 進行中の作業
-- Phase 5 の実機QA（SMS/通知/クリップボードの OTP 検出と Autofill 反映の詳細確認）
+- Phase 6 の実機QA（バックアップ/復元導線と実ファイルI/Oの端末検証）
 
 ## 検出した課題
 - VS Code 側の `get_errors` は旧 AGP (`9.0.1`) キャッシュ参照が残る
 - Cドライブ空き不足により依存変換タスクが失敗
 - `daemon` 実行時にネイティブメモリ不足でクラッシュする場合がある（`--no-daemon` では成功）
 - いくつかの Compose/Autofill API で deprecation 警告あり（現時点はビルド成功を優先して維持）
+- `lintVitalAnalyzeRelease` が `NullSafeMutableLiveData` で内部クラッシュするケースがあり、当面は lint 無効化で回避
 
 ## 対応方針
 - ビルド時は `GRADLE_USER_HOME` と `TEMP` を D ドライブへ退避して継続
@@ -151,6 +168,6 @@
 - 一時データ保存先は継続して `D:\temp` を標準運用
 
 ## 次の実施項目
-1. 実機で SMS 到着時の OTP Dataset 反映を検証（対象アプリ入力欄での自動入力挙動確認）
-2. 通知読取権限 ON/OFF 時の `OtpNotificationListener` 動作を確認
-3. クリップボード OTP 検出 ON/OFF と誤検知率を確認
+1. 実機で認証後に `設定 -> バックアップ・復元` 画面へ遷移し、暗号化エクスポート/インポートの手動E2Eを確認
+2. CSV エクスポート警告表示と、CSV インポート時のフォーマット耐性を確認
+3. 実機QA結果を `docs/specification.md` / `docs/status.md` に反映

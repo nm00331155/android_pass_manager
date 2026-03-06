@@ -5,6 +5,7 @@ object NavRoutes {
     const val Home = "home"
     const val Settings = "settings"
     const val Generator = "generator"
+    const val Backup = "backup"
 
     const val AddEditPattern = "add_edit/{credentialId}"
     const val DetailPattern = "detail/{credentialId}"

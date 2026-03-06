@@ -135,4 +135,27 @@
     <string name="otp_sms_suggestion">SMS から認証コードを自動入力</string>
     <string name="otp_detected">認証コードを検出しました: %1$s</string>
     <string name="otp_clipboard_detected">クリップボードから認証コードを検出しました</string>
+
+    <!-- バックアップ -->
+    <string name="backup_title">バックアップ・復元</string>
+    <string name="backup_export_section">エクスポート</string>
+    <string name="backup_export_encrypted">暗号化バックアップ (.securevault)</string>
+    <string name="backup_export_csv">CSV エクスポート（平文）</string>
+    <string name="backup_export_csv_warning">パスワードが平文で保存されます。&#10;信頼できる場所にのみ保存してください。&#10;&#10;本当にエクスポートしますか？</string>
+    <string name="backup_import_section">インポート</string>
+    <string name="backup_import_encrypted">暗号化バックアップから復元</string>
+    <string name="backup_import_csv">CSV からインポート</string>
+    <string name="backup_password_title">バックアップパスワード</string>
+    <string name="backup_password_hint">パスワードを入力してください</string>
+    <string name="backup_password_confirm_hint">パスワードを再入力してください</string>
+    <string name="backup_password_mismatch">パスワードが一致しません</string>
+    <string name="backup_strategy_title">重複データの処理</string>
+    <string name="backup_strategy_skip">重複をスキップ</string>
+    <string name="backup_strategy_overwrite">上書き</string>
+    <string name="backup_strategy_all">すべて追加</string>
+    <string name="backup_export_success">%1$d 件エクスポートしました</string>
+    <string name="backup_import_success">%1$d 件インポートしました</string>
+    <string name="backup_error">エラーが発生しました: %1$s</string>
+    <string name="backup_in_progress">処理中…</string>
+    <string name="settings_backup">バックアップ・復元</string>
 </resources>

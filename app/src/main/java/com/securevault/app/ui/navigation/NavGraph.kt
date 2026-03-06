@@ -13,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.securevault.app.ui.screen.addedit.AddEditScreen
 import com.securevault.app.ui.screen.auth.AuthScreen
+import com.securevault.app.ui.screen.backup.BackupScreen
 import com.securevault.app.ui.screen.detail.DetailScreen
 import com.securevault.app.ui.screen.generator.PasswordGeneratorScreen
 import com.securevault.app.ui.screen.home.HomeScreen
@@ -81,7 +82,16 @@ fun SecureVaultNavGraph(
         }
 
         composable(NavRoutes.Settings) {
-            SettingsScreen(onNavigateBack = { navController.popBackStack() })
+            SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToBackup = { navController.navigate(NavRoutes.Backup) }
+            )
+        }
+
+        composable(NavRoutes.Backup) {
+            BackupScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable(NavRoutes.Generator) {
