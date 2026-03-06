@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SecureVault</string>
+    <string name="autofill_service_name">SecureVault Autofill</string>
+
+    <string name="auth_title">認証してください</string>
+    <string name="auth_subtitle">生体認証または端末認証でロックを解除します</string>
+    <string name="auth_button">認証を開始</string>
+    <string name="auth_button_progress">認証中...</string>
+    <string name="auth_error">認証に失敗しました。再度お試しください。</string>
+    <string name="auth_fallback">生体認証が利用できないため、端末認証に切り替えます。</string>
+    <string name="auth_unavailable">この端末では利用可能な認証方法がありません。</string>
+    <string name="auth_activity_not_found">認証画面を初期化できませんでした。</string>
+
+    <string name="home_title">パスワード一覧</string>
+    <string name="add_edit_title_add">パスワードを追加</string>
+    <string name="add_edit_title_edit">パスワードを編集</string>
+    <string name="detail_title">詳細</string>
+    <string name="settings_title">設定</string>
+    <string name="generator_title">パスワード生成</string>
+
+    <string name="placeholder_coming_soon">この画面は次フェーズで詳細実装します</string>
+    <string name="open_settings">設定へ</string>
+    <string name="go_add">追加画面へ</string>
+    <string name="go_generator">生成画面へ</string>
+    <string name="go_detail">詳細画面へ</string>
+    <string name="back_home">ホームへ戻る</string>
+</resources>
