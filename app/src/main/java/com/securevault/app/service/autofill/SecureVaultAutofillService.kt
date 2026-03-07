@@ -34,6 +34,7 @@ import javax.inject.Inject
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
@@ -59,6 +60,7 @@ class SecureVaultAutofillService : AutofillService() {
     lateinit var logger: AppLogger
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var currentFillJob: Job? = null
 
     override fun onConnected() {
         createNotificationChannel()
@@ -70,6 +72,7 @@ class SecureVaultAutofillService : AutofillService() {
     }
 
     override fun onDestroy() {
+        currentFillJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -81,6 +84,9 @@ class SecureVaultAutofillService : AutofillService() {
     ) {
         logger.d(TAG, "=== onFillRequest START ===")
 
+        // 新しいリクエストが来たら前回ジョブをキャンセルする。
+        currentFillJob?.cancel()
+
         val structure = request.fillContexts.lastOrNull()?.structure
         if (structure == null) {
             logger.w(TAG, "onFillRequest: structure is null")
@@ -91,8 +97,8 @@ class SecureVaultAutofillService : AutofillService() {
         val targetPackageName = structure.activityComponent?.packageName.orEmpty()
         logger.d(TAG, "onFillRequest: targetPackage=$targetPackageName")
 
-        if (targetPackageName == APP_PACKAGE_NAME || targetPackageName == packageName) {
-            logger.d(TAG, "onFillRequest: skipping own package")
+        if (targetPackageName in EXCLUDED_PACKAGES || targetPackageName == packageName) {
+            logger.d(TAG, "onFillRequest: skipping excluded package=$targetPackageName")
             callback.onSuccess(null)
             return
         }
@@ -154,6 +160,8 @@ class SecureVaultAutofillService : AutofillService() {
             }
         }
 
+        currentFillJob = job
+
         cancellationSignal.setOnCancelListener {
             logger.d(TAG, "onFillRequest: cancelled")
             job.cancel()
@@ -166,6 +174,13 @@ class SecureVaultAutofillService : AutofillService() {
         val structure = request.fillContexts.lastOrNull()?.structure
         if (structure == null) {
             logger.w(TAG, "onSaveRequest: structure is null")
+            callback.onSuccess()
+            return
+        }
+
+        val targetPackageName = structure.activityComponent?.packageName.orEmpty()
+        if (targetPackageName in EXCLUDED_PACKAGES || targetPackageName == packageName) {
+            logger.d(TAG, "onSaveRequest: skipping excluded package=$targetPackageName")
             callback.onSuccess()
             return
         }
@@ -297,14 +312,10 @@ class SecureVaultAutofillService : AutofillService() {
 
         var hasDataset = false
         val responseBuilder = FillResponse.Builder()
-        saveInfo?.let { responseBuilder.setSaveInfo(it) }
 
         credentials.forEach { credential ->
-            // テスト用: 認証なし、最小限のDataset
             try {
-                val presentation = RemoteViews(packageName, android.R.layout.simple_list_item_1).apply {
-                    setTextViewText(android.R.id.text1, "${credential.serviceName} - ${credential.username}")
-                }
+                val presentation = createPresentation(credential, locked = false)
 
                 val datasetBuilder = Dataset.Builder(presentation)
                 var hasValue = false
@@ -323,7 +334,7 @@ class SecureVaultAutofillService : AutofillService() {
                 if (hasValue) {
                     responseBuilder.addDataset(datasetBuilder.build())
                     hasDataset = true
-                    logger.d(TAG, "buildFillResponse: added SIMPLE dataset id=${credential.id}")
+                    logger.d(TAG, "buildFillResponse: added dataset id=${credential.id}")
                 }
             } catch (e: Exception) {
                 logger.e(TAG, "buildFillResponse: EXCEPTION building dataset", e)
@@ -332,20 +343,28 @@ class SecureVaultAutofillService : AutofillService() {
 
         targets.otpId?.let { otpId ->
             try {
-                val otpPresentation = RemoteViews(packageName, android.R.layout.simple_list_item_1).apply {
-                    setTextViewText(android.R.id.text1, "SMS OTP")
-                }
+                val otpPresentation = createOtpPresentation()
+                val otpIntent = createOtpAuthenticationPendingIntent(otpId)
                 val otpDatasetBuilder = Dataset.Builder(otpPresentation)
+                otpDatasetBuilder.setAuthentication(otpIntent.intentSender)
                 otpDatasetBuilder.setValue(otpId, AutofillValue.forText(""))
                 responseBuilder.addDataset(otpDatasetBuilder.build())
                 hasDataset = true
-                logger.d(TAG, "buildFillResponse: added otp dataset")
+                logger.d(TAG, "buildFillResponse: added otp dataset with auth")
             } catch (e: Exception) {
                 logger.e(TAG, "buildFillResponse: EXCEPTION building OTP dataset", e)
             }
         }
 
-        val result = if (hasDataset || saveInfo != null) responseBuilder.build() else null
+        val result = if (hasDataset) {
+            saveInfo?.let { responseBuilder.setSaveInfo(it) }
+            responseBuilder.build()
+        } else if (saveInfo != null) {
+            responseBuilder.setSaveInfo(saveInfo)
+            responseBuilder.build()
+        } else {
+            null
+        }
         logger.d(
             TAG,
             "buildFillResponse: final result=${if (result != null) "FillResponse" else "null"}, hasDataset=$hasDataset, hasSaveInfo=${saveInfo != null}"
@@ -599,5 +618,24 @@ class SecureVaultAutofillService : AutofillService() {
         const val OTP_REQUEST_CODE_BASE = 20000
         const val PLACEHOLDER_PASSWORD = "••••••••"
         const val LOCKED_LABEL_PREFIX = "\uD83D\uDD12 "
+
+        /** Autofill の対象から除外するパッケージ */
+        val EXCLUDED_PACKAGES = setOf(
+            APP_PACKAGE_NAME,
+            "com.x8bit.bitwarden",
+            "com.onepassword.android",
+            "com.agilebits.onepassword",
+            "com.lastpass.lpandroid",
+            "keepass2android.keepass2android",
+            "keepass2android.keepass2android_nonet",
+            "com.kunzisoft.keepass.free",
+            "com.kunzisoft.keepass.pro",
+            "com.dashlane",
+            "com.nordpass.android.app.password.manager",
+            "com.enpass.android",
+            "com.roboform.android",
+            "org.nicbit.robofill",
+            "com.android.settings"
+        )
     }
 }
