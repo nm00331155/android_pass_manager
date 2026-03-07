@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Autofill service implementation that resolves credentials from local storage.
+ * 自動入力データセットの解決と保存を行う AutofillService 実装。
  */
 @AndroidEntryPoint
 class SecureVaultAutofillService : AutofillService() {
@@ -60,99 +60,112 @@ class SecureVaultAutofillService : AutofillService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * Called when Android binds to this AutofillService.
-     */
     override fun onConnected() {
         createNotificationChannel()
         logger.i(TAG, "Autofill service connected")
     }
 
-    /**
-     * Called when Android unbinds this AutofillService.
-     */
     override fun onDisconnected() {
         logger.i(TAG, "Autofill service disconnected")
     }
 
-    /**
-     * Cancels service-scoped coroutines.
-     */
     override fun onDestroy() {
         serviceScope.cancel()
         super.onDestroy()
     }
 
-    /**
-     * Provides autofill datasets for detected login fields.
-     */
     override fun onFillRequest(
         request: FillRequest,
         cancellationSignal: CancellationSignal,
         callback: FillCallback
     ) {
+        logger.d(TAG, "=== onFillRequest START ===")
+
         val structure = request.fillContexts.lastOrNull()?.structure
         if (structure == null) {
+            logger.w(TAG, "onFillRequest: structure is null")
             callback.onSuccess(null)
             return
         }
 
         val targetPackageName = structure.activityComponent?.packageName.orEmpty()
+        logger.d(TAG, "onFillRequest: targetPackage=$targetPackageName")
+
         if (targetPackageName == APP_PACKAGE_NAME || targetPackageName == packageName) {
+            logger.d(TAG, "onFillRequest: skipping own package")
             callback.onSuccess(null)
             return
         }
 
         val targets = smartFieldDetector.detect(structure)
+        logger.d(
+            TAG,
+            "onFillRequest: detected usernameId=${targets.usernameId}, passwordId=${targets.passwordId}, otpId=${targets.otpId}, webDomain=${targets.webDomain}"
+        )
 
         if (targets.usernameId == null && targets.passwordId == null && targets.otpId == null) {
+            logger.d(TAG, "onFillRequest: no fields detected")
             callback.onSuccess(null)
             return
         }
 
-        logger.d(
-            TAG,
-            "onFillRequest: pkg=$targetPackageName, username=${targets.usernameId}, password=${targets.passwordId}, otp=${targets.otpId}"
-        )
-
         val job = serviceScope.launch {
-            if (targets.otpId != null) {
-                runCatching {
-                    val status = smsOtpManager.startListening()
-                    logger.d(TAG, "SmsOtpManager start status=$status")
-                }.onFailure { throwable ->
-                    logger.w(TAG, "Failed to start SMS OTP listener", throwable)
+            try {
+                if (targets.otpId != null) {
+                    runCatching {
+                        val status = smsOtpManager.startListening()
+                        logger.d(TAG, "SmsOtpManager start status=$status")
+                    }.onFailure { throwable ->
+                        logger.w(TAG, "Failed to start SMS OTP listener", throwable)
+                    }
                 }
-            }
 
-            val credentials = if (targets.usernameId != null || targets.passwordId != null) {
-                runCatching {
-                    resolveCredentials(targetPackageName, targets.webDomain)
-                }.getOrElse { throwable ->
-                    logger.w(TAG, "Failed to resolve autofill credentials", throwable)
+                val credentials = if (targets.usernameId != null || targets.passwordId != null) {
+                    runCatching {
+                        resolveCredentials(targetPackageName, targets.webDomain)
+                    }.getOrElse { throwable ->
+                        logger.e(TAG, "Failed to resolve autofill credentials", throwable)
+                        emptyList()
+                    }
+                } else {
                     emptyList()
                 }
-            } else {
-                emptyList()
-            }
 
-            val response = buildFillResponse(targets, credentials)
-            withContext(Dispatchers.Main) {
-                callback.onSuccess(response)
+                logger.d(TAG, "onFillRequest: resolved ${credentials.size} credentials")
+                credentials.forEachIndexed { index, credential ->
+                    logger.d(
+                        TAG,
+                        "onFillRequest: credential[$index] id=${credential.id}, service=${credential.serviceName}, user=${credential.username}"
+                    )
+                }
+
+                val response = buildFillResponse(targets, credentials)
+                logger.d(TAG, "onFillRequest: responseBuilt=${response != null}")
+
+                withContext(Dispatchers.Main) {
+                    callback.onSuccess(response)
+                }
+                logger.d(TAG, "=== onFillRequest END (success) ===")
+            } catch (throwable: Throwable) {
+                logger.e(TAG, "onFillRequest: exception", throwable)
+                withContext(Dispatchers.Main) {
+                    callback.onSuccess(null)
+                }
             }
         }
 
         cancellationSignal.setOnCancelListener {
+            logger.d(TAG, "onFillRequest: cancelled")
             job.cancel()
         }
     }
 
-    /**
-     * Saves newly entered credentials when the host app requests save.
-     */
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
+        logger.d(TAG, "=== onSaveRequest START ===")
+
         val structure = request.fillContexts.lastOrNull()?.structure
         if (structure == null) {
+            logger.w(TAG, "onSaveRequest: structure is null")
             callback.onSuccess()
             return
         }
@@ -160,7 +173,12 @@ class SecureVaultAutofillService : AutofillService() {
         serviceScope.launch {
             runCatching {
                 val savedData = extractSavedValues(structure)
+                logger.d(
+                    TAG,
+                    "onSaveRequest: extracted username=${savedData?.username}, hasPassword=${!savedData?.password.isNullOrBlank()}, package=${savedData?.packageName}, domain=${savedData?.webDomain}"
+                )
                 if (savedData == null || savedData.password.isNullOrBlank()) {
+                    logger.d(TAG, "onSaveRequest: no usable credential data")
                     withContext(Dispatchers.Main) {
                         callback.onSuccess()
                     }
@@ -168,6 +186,7 @@ class SecureVaultAutofillService : AutofillService() {
                 }
 
                 val serviceName = inferServiceName(savedData.packageName, savedData.webDomain)
+                logger.d(TAG, "onSaveRequest: saving service=$serviceName")
                 credentialRepository.save(
                     Credential(
                         serviceName = serviceName,
@@ -179,12 +198,13 @@ class SecureVaultAutofillService : AutofillService() {
                     )
                 )
                 showSaveNotification(serviceName)
+                logger.d(TAG, "=== onSaveRequest END (saved) ===")
 
                 withContext(Dispatchers.Main) {
                     callback.onSuccess()
                 }
             }.onFailure { throwable ->
-                logger.w(TAG, "Failed to save autofill credential", throwable)
+                logger.e(TAG, "onSaveRequest: failed", throwable)
                 withContext(Dispatchers.Main) {
                     callback.onFailure(SAVE_FAILURE_MESSAGE)
                 }
@@ -193,27 +213,76 @@ class SecureVaultAutofillService : AutofillService() {
     }
 
     private suspend fun resolveCredentials(packageName: String, webDomain: String?): List<Credential> {
-        val fromPackage = if (packageName.isNotBlank()) {
-            credentialRepository.findByPackageName(packageName)
-        } else {
-            emptyList()
-        }
-        val fromUrl = if (!webDomain.isNullOrBlank()) {
-            credentialRepository.findByUrl(webDomain)
-        } else {
-            emptyList()
-        }
-        logger.d(TAG, "resolveCredentials: fromPkg=${fromPackage.size}, fromUrl=${fromUrl.size}")
+        logger.d(TAG, "resolveCredentials: package=$packageName, webDomain=$webDomain")
 
-        if (fromPackage.isNotEmpty()) {
-            return fromPackage.take(MAX_DATASET_ITEMS)
+        if (packageName.isNotBlank()) {
+            val fromPackage = credentialRepository.findByPackageName(packageName)
+            logger.d(TAG, "resolveCredentials: fromPackage=${fromPackage.size}")
+            if (fromPackage.isNotEmpty()) {
+                return fromPackage.take(MAX_DATASET_ITEMS)
+            }
         }
 
-        if (fromUrl.isNotEmpty()) {
-            return fromUrl.take(MAX_DATASET_ITEMS)
+        if (!webDomain.isNullOrBlank()) {
+            val fromUrl = credentialRepository.findByUrl(webDomain)
+            logger.d(TAG, "resolveCredentials: fromUrl=${fromUrl.size} domain=$webDomain")
+            if (fromUrl.isNotEmpty()) {
+                return fromUrl.take(MAX_DATASET_ITEMS)
+            }
+
+            val fromServiceSearch = credentialRepository.search(webDomain).first()
+            logger.d(TAG, "resolveCredentials: fromServiceSearch=${fromServiceSearch.size}")
+            if (fromServiceSearch.isNotEmpty()) {
+                return fromServiceSearch.take(MAX_DATASET_ITEMS)
+            }
+
+            val mainDomain = extractMainDomain(webDomain)
+            if (!mainDomain.isNullOrBlank() && mainDomain != webDomain.lowercase()) {
+                val fromDomainSearch = credentialRepository.search(mainDomain).first()
+                logger.d(
+                    TAG,
+                    "resolveCredentials: fromDomainSearch=${fromDomainSearch.size} mainDomain=$mainDomain"
+                )
+                if (fromDomainSearch.isNotEmpty()) {
+                    return fromDomainSearch.take(MAX_DATASET_ITEMS)
+                }
+            }
         }
 
-        return credentialRepository.getAll().first().take(MAX_DATASET_ITEMS)
+        logger.d(TAG, "resolveCredentials: no match found")
+        return emptyList()
+    }
+
+    /**
+     * ドメインからメイン識別子を抽出する。
+     * 例: id.kuronekoyamato.co.jp -> kuronekoyamato
+     */
+    private fun extractMainDomain(domain: String): String? {
+        val parts = domain.lowercase()
+            .split(".")
+            .filter { it.isNotBlank() }
+        if (parts.size < 2) {
+            return null
+        }
+
+        val twoLevelTlds = setOf(
+            "co.jp",
+            "or.jp",
+            "ne.jp",
+            "ac.jp",
+            "go.jp",
+            "co.uk",
+            "org.uk",
+            "com.au",
+            "co.kr",
+            "com.br",
+            "com.cn"
+        )
+        val twoLevelSuffix = "${parts[parts.size - 2]}.${parts.last()}"
+        val suffix = if (twoLevelSuffix in twoLevelTlds) twoLevelSuffix else parts.last()
+        val suffixParts = suffix.split(".").size
+        val mainIndex = parts.size - suffixParts - 1
+        return parts.getOrNull(mainIndex)
     }
 
     private fun buildFillResponse(
@@ -221,7 +290,8 @@ class SecureVaultAutofillService : AutofillService() {
         credentials: List<Credential>
     ): FillResponse? {
         val saveInfo = createSaveInfo(targets.usernameId, targets.passwordId)
-        if (credentials.isEmpty() && saveInfo == null) {
+        if (credentials.isEmpty() && saveInfo == null && targets.otpId == null) {
+            logger.d(TAG, "buildFillResponse: no dataset and no saveInfo")
             return null
         }
 
@@ -230,29 +300,48 @@ class SecureVaultAutofillService : AutofillService() {
         saveInfo?.let { responseBuilder.setSaveInfo(it) }
 
         credentials.forEach { credential ->
-            val presentation = createPresentation(credential)
-            val datasetBuilder = Dataset.Builder(presentation)
-            var hasValue = false
+            val authPresentation = createPresentation(credential, locked = true)
+            val authDatasetBuilder = Dataset.Builder(authPresentation)
+            var hasAuthValue = false
 
-            targets.usernameId?.let { usernameId ->
-                datasetBuilder.setValue(usernameId, AutofillValue.forText(""))
-                hasValue = true
+            targets.usernameId?.let { autofillId ->
+                authDatasetBuilder.setValue(autofillId, AutofillValue.forText(credential.username))
+                hasAuthValue = true
+            }
+            targets.passwordId?.let { autofillId ->
+                authDatasetBuilder.setValue(autofillId, AutofillValue.forText(PLACEHOLDER_PASSWORD))
+                hasAuthValue = true
             }
 
-            targets.passwordId?.let { passwordId ->
-                datasetBuilder.setValue(passwordId, AutofillValue.forText(""))
-                hasValue = true
-            }
-
-            if (hasValue) {
+            if (hasAuthValue) {
                 val authenticationIntent = createAuthenticationPendingIntent(
                     credentialId = credential.id,
                     usernameId = targets.usernameId,
                     passwordId = targets.passwordId
                 )
-                datasetBuilder.setAuthentication(authenticationIntent.intentSender)
-                responseBuilder.addDataset(datasetBuilder.build())
+                authDatasetBuilder.setAuthentication(authenticationIntent.intentSender)
+                responseBuilder.addDataset(authDatasetBuilder.build())
                 hasDataset = true
+                logger.d(TAG, "buildFillResponse: added authenticated dataset id=${credential.id}")
+            }
+
+            val directPresentation = createPresentation(credential, locked = false)
+            val directDatasetBuilder = Dataset.Builder(directPresentation)
+            var hasDirectValue = false
+
+            targets.usernameId?.let { autofillId ->
+                directDatasetBuilder.setValue(autofillId, AutofillValue.forText(credential.username))
+                hasDirectValue = true
+            }
+            targets.passwordId?.let { autofillId ->
+                directDatasetBuilder.setValue(autofillId, AutofillValue.forText(credential.password))
+                hasDirectValue = true
+            }
+
+            if (hasDirectValue) {
+                responseBuilder.addDataset(directDatasetBuilder.build())
+                hasDataset = true
+                logger.d(TAG, "buildFillResponse: added direct dataset id=${credential.id}")
             }
         }
 
@@ -265,14 +354,16 @@ class SecureVaultAutofillService : AutofillService() {
 
             responseBuilder.addDataset(otpDatasetBuilder.build())
             hasDataset = true
+            logger.d(TAG, "buildFillResponse: added otp dataset")
         }
 
         return if (hasDataset || saveInfo != null) responseBuilder.build() else null
     }
 
-    private fun createPresentation(credential: Credential): RemoteViews {
+    private fun createPresentation(credential: Credential, locked: Boolean): RemoteViews {
         return RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
-            setTextViewText(R.id.service_name, credential.serviceName)
+            val prefix = if (locked) LOCKED_LABEL_PREFIX else ""
+            setTextViewText(R.id.service_name, "$prefix${credential.serviceName}")
             setTextViewText(R.id.username, credential.username)
         }
     }
@@ -368,6 +459,7 @@ class SecureVaultAutofillService : AutofillService() {
                     val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.usernameId
                     if (byDetectedId || isLikelyUsernameField(node)) {
                         username = textValue
+                        logger.d(TAG, "extractSavedValues: captured username")
                     }
                 }
 
@@ -375,6 +467,7 @@ class SecureVaultAutofillService : AutofillService() {
                     val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.passwordId
                     if (byDetectedId || isLikelyPasswordField(node)) {
                         password = textValue
+                        logger.d(TAG, "extractSavedValues: captured password")
                     }
                 }
             }
@@ -390,6 +483,7 @@ class SecureVaultAutofillService : AutofillService() {
         }
 
         if (username.isNullOrBlank() && password.isNullOrBlank()) {
+            logger.d(TAG, "extractSavedValues: no username/password found")
             return null
         }
 
@@ -430,7 +524,6 @@ class SecureVaultAutofillService : AutofillService() {
             idEntry.contains("pass") ||
             hintText.contains("password") ||
             hintText.contains("pass") ||
-            hintText.contains("暗証") ||
             variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
             variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
             variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
@@ -511,5 +604,7 @@ class SecureVaultAutofillService : AutofillService() {
         const val AUTOFILL_SAVE_CHANNEL_ID = "autofill_save"
         const val SAVE_NOTIFICATION_BASE_ID = 12000
         const val OTP_REQUEST_CODE_BASE = 20000
+        const val PLACEHOLDER_PASSWORD = "••••••••"
+        const val LOCKED_LABEL_PREFIX = "\uD83D\uDD12 "
     }
 }

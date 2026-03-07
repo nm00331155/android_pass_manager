@@ -64,7 +64,7 @@ class AppLogger @Inject constructor() {
     }
 
     private companion object {
-        const val MAX_ENTRIES = 2000
+        const val MAX_ENTRIES = 5000
         const val STACK_TRACE_MAX_LENGTH = 500
         const val LOG_DIRECTORY_NAME = "logs"
     }

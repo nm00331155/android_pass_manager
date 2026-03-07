@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.service.autofill.Dataset
-import android.util.Log
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillManager
 import android.view.autofill.AutofillValue
@@ -15,6 +14,7 @@ import androidx.lifecycle.lifecycleScope
 import com.securevault.app.R
 import com.securevault.app.biometric.BiometricAuthManager
 import com.securevault.app.data.repository.CredentialRepository
+import com.securevault.app.util.AppLogger
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
@@ -32,17 +32,27 @@ class AutofillAuthActivity : FragmentActivity() {
     @Inject
     lateinit var credentialRepository: CredentialRepository
 
+    @Inject
+    lateinit var logger: AppLogger
+
     /**
      * Starts biometric authentication and returns a resolved Dataset on success.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        logger.d(TAG, "=== AutofillAuthActivity onCreate ===")
 
         val credentialId = intent.getLongExtra(EXTRA_CREDENTIAL_ID, INVALID_CREDENTIAL_ID)
         val usernameAutofillId = getAutofillIdExtra(EXTRA_USERNAME_AUTOFILL_ID)
         val passwordAutofillId = getAutofillIdExtra(EXTRA_PASSWORD_AUTOFILL_ID)
 
+        logger.d(
+            TAG,
+            "AutofillAuthActivity args: credentialId=$credentialId, usernameAutofillId=$usernameAutofillId, passwordAutofillId=$passwordAutofillId"
+        )
+
         if (credentialId == INVALID_CREDENTIAL_ID || (usernameAutofillId == null && passwordAutofillId == null)) {
+            logger.w(TAG, "Invalid intent extras for autofill auth")
             finishCanceled()
             return
         }
@@ -52,17 +62,19 @@ class AutofillAuthActivity : FragmentActivity() {
             title = getString(R.string.autofill_auth_title),
             subtitle = getString(R.string.autofill_auth_subtitle),
             onSuccess = {
+                logger.d(TAG, "Biometric auth SUCCESS")
                 completeWithCredential(
                     credentialId = credentialId,
                     usernameAutofillId = usernameAutofillId,
                     passwordAutofillId = passwordAutofillId
                 )
             },
-            onError = {
+            onError = { errorMessage ->
+                logger.w(TAG, "Biometric auth ERROR: $errorMessage")
                 finishCanceled()
             },
             onFallback = {
-                Log.d(TAG, "Biometric unavailable, falling back to device credential")
+                logger.d(TAG, "Biometric unavailable, falling back to device credential")
             }
         )
     }
@@ -76,13 +88,19 @@ class AutofillAuthActivity : FragmentActivity() {
             val credential = runCatching {
                 credentialRepository.getById(credentialId).first()
             }.onFailure { throwable ->
-                Log.w(TAG, "Failed to load credential id=$credentialId", throwable)
+                logger.e(TAG, "Failed to load credential id=$credentialId", throwable)
             }.getOrNull()
 
             if (credential == null) {
+                logger.w(TAG, "Credential not found for id=$credentialId")
                 finishCanceled()
                 return@launch
             }
+
+            logger.d(
+                TAG,
+                "Loaded credential: service=${credential.serviceName}, user=${credential.username}, passwordLen=${credential.password.length}"
+            )
 
             val dataset = Dataset.Builder(
                 RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
@@ -92,9 +110,11 @@ class AutofillAuthActivity : FragmentActivity() {
             ).apply {
                 usernameAutofillId?.let { autofillId ->
                     setValue(autofillId, AutofillValue.forText(credential.username))
+                    logger.d(TAG, "Set username for autofillId=$autofillId")
                 }
                 passwordAutofillId?.let { autofillId ->
                     setValue(autofillId, AutofillValue.forText(credential.password))
+                    logger.d(TAG, "Set password for autofillId=$autofillId")
                 }
             }.build()
 
@@ -102,6 +122,7 @@ class AutofillAuthActivity : FragmentActivity() {
                 putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset)
             }
             setResult(Activity.RESULT_OK, resultIntent)
+            logger.d(TAG, "=== AutofillAuthActivity returning RESULT_OK ===")
             finish()
         }
     }
@@ -117,6 +138,7 @@ class AutofillAuthActivity : FragmentActivity() {
 
     private fun finishCanceled() {
         setResult(Activity.RESULT_CANCELED)
+        logger.d(TAG, "Returning RESULT_CANCELED")
         finish()
     }
 

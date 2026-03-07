@@ -4,6 +4,7 @@ import android.app.assist.AssistStructure
 import android.text.InputType
 import android.view.View
 import android.view.autofill.AutofillId
+import com.securevault.app.util.AppLogger
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,7 +13,9 @@ import javax.inject.Singleton
  * Detects username, password, and OTP targets from an Autofill assist structure.
  */
 @Singleton
-class SmartFieldDetector @Inject constructor() {
+class SmartFieldDetector @Inject constructor(
+    private val logger: AppLogger
+) {
 
     /**
      * Detects candidate fields for username, password, and OTP.
@@ -42,16 +45,33 @@ class SmartFieldDetector @Inject constructor() {
             val nodeText = node.text?.toString()?.lowercase(Locale.ROOT).orEmpty()
             val htmlTokens = readHtmlTokens(node)
 
+            logger.d(
+                TAG,
+                "detect node: hints=$hints, id=$idEntry, hint=${node.hint.orEmpty()}, inputType=${node.inputType}"
+            )
+
             if (usernameId == null && isUsernameField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
                 usernameId = node.autofillId
+                logger.d(
+                    TAG,
+                    "detect: FOUND username field id=${node.autofillId}, idEntry=$idEntry, hint=${node.hint.orEmpty()}"
+                )
             }
 
             if (passwordId == null && isPasswordField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
                 passwordId = node.autofillId
+                logger.d(
+                    TAG,
+                    "detect: FOUND password field id=${node.autofillId}, idEntry=$idEntry, hint=${node.hint.orEmpty()}"
+                )
             }
 
             if (otpId == null && isOtpField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
                 otpId = node.autofillId
+                logger.d(
+                    TAG,
+                    "detect: FOUND OTP field id=${node.autofillId}, idEntry=$idEntry, hint=${node.hint.orEmpty()}"
+                )
             }
 
             for (index in 0 until node.childCount) {
@@ -62,6 +82,11 @@ class SmartFieldDetector @Inject constructor() {
         for (windowIndex in 0 until structure.windowNodeCount) {
             traverse(structure.getWindowNodeAt(windowIndex).rootViewNode)
         }
+
+        logger.d(
+            TAG,
+            "detect result: username=$usernameId, password=$passwordId, otp=$otpId, domain=$webDomain, totalIds=${allAutofillIds.size}"
+        )
 
         return DetectedFields(
             usernameId = usernameId,
@@ -210,6 +235,7 @@ class SmartFieldDetector @Inject constructor() {
     )
 
     private companion object {
+        const val TAG = "SmartFieldDetector"
         const val OTP_MIN_LENGTH = 4
         const val OTP_MAX_LENGTH = 8
 
