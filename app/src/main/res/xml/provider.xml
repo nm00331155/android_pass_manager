@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<credential-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsSubtitle="KeyPass パスワードマネージャー"
+    android:settingsActivity="com.securevault.app.ui.MainActivity">
+    <capabilities>
+        <capability name="android.credentials.TYPE_PASSWORD_CREDENTIAL" />
+    </capabilities>
+</credential-provider>

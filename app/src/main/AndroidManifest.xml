@@ -35,6 +35,11 @@
             android:theme="@style/Theme.SecureVault.Transparent" />
 
         <activity
+            android:name=".service.credential.CredentialProviderAuthActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SecureVault.Transparent" />
+
+        <activity
             android:name=".service.otp.SmsOtpActivity"
             android:exported="false" />
 
@@ -58,6 +63,21 @@
             <meta-data
                 android:name="android.autofill"
                 android:resource="@xml/autofill_service_config" />
+        </service>
+
+        <service
+            android:name=".service.credential.KeyPassCredentialProviderService"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.credentials.CredentialProviderService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.credentials.provider"
+                android:resource="@xml/provider" />
         </service>
 
         <service
