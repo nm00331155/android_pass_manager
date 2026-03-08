@@ -14,13 +14,17 @@ import android.service.autofill.Dataset
 import android.service.autofill.FillCallback
 import android.service.autofill.FillRequest
 import android.service.autofill.FillResponse
+import android.service.autofill.InlinePresentation
 import android.service.autofill.SaveCallback
 import android.service.autofill.SaveInfo
 import android.service.autofill.SaveRequest
 import android.text.InputType
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillValue
+import android.view.inputmethod.InlineSuggestionsRequest
 import android.widget.RemoteViews
+import androidx.annotation.RequiresApi
+import androidx.autofill.inline.v1.InlineSuggestionUi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.securevault.app.R
@@ -33,10 +37,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -59,7 +64,6 @@ class SecureVaultAutofillService : AutofillService() {
     lateinit var logger: AppLogger
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var currentFillJob: Job? = null
 
     override fun onConnected() {
         createNotificationChannel()
@@ -71,7 +75,6 @@ class SecureVaultAutofillService : AutofillService() {
     }
 
     override fun onDestroy() {
-        currentFillJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -82,9 +85,6 @@ class SecureVaultAutofillService : AutofillService() {
         callback: FillCallback
     ) {
         logger.d(TAG, "=== onFillRequest START ===")
-
-        // 新しいリクエストが来たら前回ジョブをキャンセルする。
-        currentFillJob?.cancel()
 
         val structure = request.fillContexts.lastOrNull()?.structure
         if (structure == null) {
@@ -114,6 +114,12 @@ class SecureVaultAutofillService : AutofillService() {
             logger.d(TAG, "onFillRequest: no fields detected")
             callback.onSuccess(null)
             return
+        }
+
+        val inlineRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            request.inlineSuggestionsRequest
+        } else {
+            null
         }
 
         val job = serviceScope.launch {
@@ -146,14 +152,30 @@ class SecureVaultAutofillService : AutofillService() {
                     )
                 }
 
-                val response = buildFillResponse(targets, credentials)
+                val response = buildFillResponse(targets, credentials, inlineRequest)
                 logger.d(TAG, "onFillRequest: responseBuilt=${response != null}")
 
+                if (!isActive) {
+                    logger.d(TAG, "onFillRequest: job already cancelled, skipping callback")
+                    return@launch
+                }
+
                 withContext(Dispatchers.Main) {
+                    // デバッグ確認用: サービス応答がOSに届いているかを可視化する。
+                    android.widget.Toast.makeText(
+                        applicationContext,
+                        "SecureVault: ${credentials.size}件の候補 (domain=${targets.webDomain})",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
                     callback.onSuccess(response)
                 }
                 logger.d(TAG, "=== onFillRequest END (success) ===")
             } catch (throwable: Throwable) {
+                if (throwable is CancellationException) {
+                    // キャンセル時は callback を返さず、OS 側のキャンセル処理に委ねる。
+                    logger.d(TAG, "onFillRequest: coroutine cancelled, not calling callback")
+                    return@launch
+                }
                 logger.e(TAG, "onFillRequest: exception", throwable)
                 withContext(Dispatchers.Main) {
                     callback.onSuccess(null)
@@ -161,10 +183,8 @@ class SecureVaultAutofillService : AutofillService() {
             }
         }
 
-        currentFillJob = job
-
         cancellationSignal.setOnCancelListener {
-            logger.d(TAG, "onFillRequest: cancelled")
+            logger.d(TAG, "onFillRequest: cancelled by signal")
             job.cancel()
         }
     }
@@ -385,7 +405,8 @@ class SecureVaultAutofillService : AutofillService() {
 
     private fun buildFillResponse(
         targets: SmartFieldDetector.DetectedFields,
-        credentials: List<Credential>
+        credentials: List<Credential>,
+        inlineRequest: InlineSuggestionsRequest?
     ): FillResponse? {
         val saveInfo = createSaveInfo(targets.usernameId, targets.passwordId)
         if (credentials.isEmpty() && saveInfo == null && targets.otpId == null) {
@@ -396,11 +417,25 @@ class SecureVaultAutofillService : AutofillService() {
         var hasDataset = false
         val responseBuilder = FillResponse.Builder()
 
-        credentials.forEach { credential ->
+        credentials.forEachIndexed { index, credential ->
             try {
-                val presentation = createPresentation(credential, locked = false)
-
+                val presentation = createPresentation(credential, locked = true)
                 val datasetBuilder = Dataset.Builder(presentation)
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && inlineRequest != null) {
+                    val inlinePresentation = createInlinePresentation(credential, inlineRequest, index)
+                    if (inlinePresentation != null) {
+                        datasetBuilder.setInlinePresentation(inlinePresentation)
+                    }
+                }
+
+                val authPendingIntent = createAuthenticationPendingIntent(
+                    credentialId = credential.id,
+                    usernameId = targets.usernameId,
+                    passwordId = targets.passwordId
+                )
+                datasetBuilder.setAuthentication(authPendingIntent.intentSender)
+
                 var hasValue = false
 
                 targets.usernameId?.let { id ->
@@ -409,7 +444,7 @@ class SecureVaultAutofillService : AutofillService() {
                     logger.d(TAG, "buildFillResponse: set username=${credential.username} for id=$id")
                 }
                 targets.passwordId?.let { id ->
-                    datasetBuilder.setValue(id, AutofillValue.forText(credential.password))
+                    datasetBuilder.setValue(id, AutofillValue.forText(PLACEHOLDER_PASSWORD))
                     hasValue = true
                     logger.d(TAG, "buildFillResponse: set password for id=$id")
                 }
@@ -439,20 +474,52 @@ class SecureVaultAutofillService : AutofillService() {
             }
         }
 
-        val result = if (hasDataset) {
+        if (hasDataset) {
             saveInfo?.let { responseBuilder.setSaveInfo(it) }
-            responseBuilder.build()
         } else if (saveInfo != null) {
             responseBuilder.setSaveInfo(saveInfo)
-            responseBuilder.build()
-        } else {
-            null
         }
+
+        val result = if (hasDataset || saveInfo != null) responseBuilder.build() else null
         logger.d(
             TAG,
             "buildFillResponse: final result=${if (result != null) "FillResponse" else "null"}, hasDataset=$hasDataset, hasSaveInfo=${saveInfo != null}"
         )
         return result
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun createInlinePresentation(
+        credential: Credential,
+        inlineRequest: InlineSuggestionsRequest,
+        index: Int
+    ): InlinePresentation? {
+        val specs = inlineRequest.inlinePresentationSpecs
+        if (specs.isEmpty()) {
+            return null
+        }
+        val spec = if (index < specs.size) specs[index] else specs.last()
+
+        return runCatching {
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                abs(credential.id.toInt()) + index,
+                Intent(this, AutofillAuthActivity::class.java).apply {
+                    putExtra(AutofillAuthActivity.EXTRA_CREDENTIAL_ID, credential.id)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val slice = InlineSuggestionUi.newContentBuilder(pendingIntent)
+                .setTitle(credential.serviceName)
+                .setSubtitle(credential.username)
+                .build()
+                .slice
+
+            InlinePresentation(slice, spec, false)
+        }.onFailure { throwable ->
+            logger.w(TAG, "Failed to create inline presentation", throwable)
+        }.getOrNull()
     }
 
     private fun createPresentation(credential: Credential, locked: Boolean): RemoteViews {

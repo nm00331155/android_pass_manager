@@ -96,6 +96,7 @@ dependencies {
     implementation(libs.sqlcipher.android)
     implementation(libs.google.tink.android)
     implementation(libs.androidx.biometric)
+    implementation("androidx.autofill:autofill:1.1.0")
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
