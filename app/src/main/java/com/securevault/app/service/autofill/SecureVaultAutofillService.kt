@@ -424,8 +424,18 @@ class SecureVaultAutofillService : AutofillService() {
 
         credentials.forEachIndexed { index, credential ->
             try {
-                val presentation = createPresentation(credential, locked = true)
-                val datasetBuilder = Dataset.Builder(presentation)
+                // 各フィールドごとに個別 presentation を指定し、認証なしで直接値を返す。
+                val usernamePresentation = RemoteViews(packageName, android.R.layout.simple_list_item_1).apply {
+                    setTextViewText(
+                        android.R.id.text1,
+                        "${credential.serviceName} - ${credential.username}"
+                    )
+                }
+                val passwordPresentation = RemoteViews(packageName, android.R.layout.simple_list_item_1).apply {
+                    setTextViewText(android.R.id.text1, "パスワード (${credential.serviceName})")
+                }
+
+                val datasetBuilder = Dataset.Builder()
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && inlineRequest != null) {
                     val inlinePresentation = createInlinePresentation(credential, inlineRequest, index)
@@ -448,22 +458,24 @@ class SecureVaultAutofillService : AutofillService() {
                     )
                 }
 
-                val authPendingIntent = createAuthenticationPendingIntent(
-                    credentialId = credential.id,
-                    usernameId = targets.usernameId,
-                    passwordId = targets.passwordId
-                )
-                datasetBuilder.setAuthentication(authPendingIntent.intentSender)
-
                 var hasValue = false
 
                 targets.usernameId?.let { id ->
-                    datasetBuilder.setValue(id, AutofillValue.forText(credential.username))
+                    datasetBuilder.setValue(
+                        id,
+                        AutofillValue.forText(credential.username),
+                        usernamePresentation
+                    )
                     hasValue = true
                     logger.d(TAG, "buildFillResponse: set username=${credential.username} for id=$id")
                 }
+
                 targets.passwordId?.let { id ->
-                    datasetBuilder.setValue(id, AutofillValue.forText(PLACEHOLDER_PASSWORD))
+                    datasetBuilder.setValue(
+                        id,
+                        AutofillValue.forText(credential.password),
+                        passwordPresentation
+                    )
                     hasValue = true
                     logger.d(TAG, "buildFillResponse: set password for id=$id")
                 }
@@ -471,7 +483,10 @@ class SecureVaultAutofillService : AutofillService() {
                 if (hasValue) {
                     responseBuilder.addDataset(datasetBuilder.build())
                     hasDataset = true
-                    logger.d(TAG, "buildFillResponse: added dataset id=${credential.id}")
+                    logger.d(
+                        TAG,
+                        "buildFillResponse: added dataset id=${credential.id} (NO auth gate, direct values)"
+                    )
                 }
             } catch (e: Exception) {
                 logger.e(TAG, "buildFillResponse: EXCEPTION building dataset", e)
@@ -480,14 +495,18 @@ class SecureVaultAutofillService : AutofillService() {
 
         targets.otpId?.let { otpId ->
             try {
-                val otpPresentation = createOtpPresentation()
-                val otpIntent = createOtpAuthenticationPendingIntent(otpId)
-                val otpDatasetBuilder = Dataset.Builder(otpPresentation)
-                otpDatasetBuilder.setAuthentication(otpIntent.intentSender)
-                otpDatasetBuilder.setValue(otpId, AutofillValue.forText(""))
+                val otpPresentation = RemoteViews(packageName, android.R.layout.simple_list_item_1).apply {
+                    setTextViewText(android.R.id.text1, getString(R.string.otp_sms_suggestion))
+                }
+                val otpDatasetBuilder = Dataset.Builder()
+                otpDatasetBuilder.setValue(
+                    otpId,
+                    AutofillValue.forText(""),
+                    otpPresentation
+                )
                 responseBuilder.addDataset(otpDatasetBuilder.build())
                 hasDataset = true
-                logger.d(TAG, "buildFillResponse: added otp dataset with auth")
+                logger.d(TAG, "buildFillResponse: added otp dataset (NO auth gate)")
             } catch (e: Exception) {
                 logger.e(TAG, "buildFillResponse: EXCEPTION building OTP dataset", e)
             }

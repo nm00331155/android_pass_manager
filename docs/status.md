@@ -1,6 +1,6 @@
 # 作業状況
 
-最終更新: 2026-03-08 13:26:48 +09:00
+最終更新: 2026-03-08 13:47:22 +09:00
 
 ## 現在のフェーズ
 - Phase 1〜6: 全完了
@@ -27,6 +27,14 @@
 - `play-services-auth` 依存あり（SMS OTP 用）だが INTERNET 権限は Manifest で明示除去
 
 ## 本セッションで完了した作業
+- Autofill 候補UI表示検証のため `buildFillResponse` を公式サンプル準拠へ修正
+  - 改修: `SecureVaultAutofillService.kt`
+    - `credentials.forEachIndexed` を `Dataset.Builder()` + 3引数 `setValue(AutofillId, AutofillValue, RemoteViews)` へ全面置換
+    - presentation を `android.R.layout.simple_list_item_1` / `android.R.id.text1` に統一（username/password）
+    - 認証ゲート（`setAuthentication` / `PendingIntent`）を一時無効化し、直接値入力へ変更
+    - OTP Dataset も同様に no-auth + 3引数 `setValue` パターンへ変更
+  - 期待効果: OS による認証付き Dataset の表示抑制要因を切り分け、まずドロップダウン候補の可視化を優先
+
 - Android 15 / Galaxy S25 向け Autofill Inline 診断強化を実施
   - 改修: `SecureVaultAutofillService.kt`
     - `buildFillResponse` 冒頭に inlineRequest/specsCount/maxSuggestionCount ログを追加
