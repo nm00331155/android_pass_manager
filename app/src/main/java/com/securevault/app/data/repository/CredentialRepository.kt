@@ -32,6 +32,9 @@ interface CredentialRepository {
     /** URL 部分一致で検索する。 */
     suspend fun findByUrl(url: String): List<Credential>
 
+    /** ドメインで serviceName / serviceUrl を横断検索する（Autofill 用）。 */
+    suspend fun findByDomain(domain: String): List<Credential>
+
     /** 新規保存または更新する。 */
     suspend fun save(credential: Credential)
 

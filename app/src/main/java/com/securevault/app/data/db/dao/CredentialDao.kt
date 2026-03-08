@@ -35,6 +35,10 @@ interface CredentialDao {
     @Query("SELECT * FROM credentials WHERE serviceUrl LIKE '%' || :url || '%' ORDER BY serviceName ASC")
     suspend fun findByUrl(url: String): List<CredentialEntity>
 
+    /** serviceName / serviceUrl をドメイン部分一致で検索する（Autofill 用）。 */
+    @Query("SELECT * FROM credentials WHERE serviceName LIKE '%' || :domain || '%' OR serviceUrl LIKE '%' || :domain || '%' ORDER BY serviceName ASC")
+    suspend fun findByDomain(domain: String): List<CredentialEntity>
+
     /** カテゴリで絞り込んで取得する。 */
     @Query("SELECT * FROM credentials WHERE category = :category ORDER BY serviceName ASC")
     fun getByCategory(category: String): Flow<List<CredentialEntity>>

@@ -93,6 +93,11 @@ class CredentialRepositoryImpl @Inject constructor(
         return credentialDao.findByUrl(url).mapNotNull { it.toDomainOrNull() }
     }
 
+    /** ドメインで serviceName / serviceUrl を横断検索する。 */
+    override suspend fun findByDomain(domain: String): List<Credential> {
+        return credentialDao.findByDomain(domain).mapNotNull { it.toDomainOrNull() }
+    }
+
     /** 新規保存または更新する。 */
     override suspend fun save(credential: Credential) {
         logger.d(TAG, "save: id=${credential.id}, service=${credential.serviceName}")

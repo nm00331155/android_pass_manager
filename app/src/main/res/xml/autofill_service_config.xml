@@ -2,16 +2,22 @@
 <autofill-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:settingsActivity="com.securevault.app.ui.MainActivity">
 
-    <compatibility-package android:name="com.android.chrome" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="com.chrome.beta" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="com.chrome.dev" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="org.mozilla.firefox" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="org.mozilla.firefox_beta" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="com.brave.browser" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="com.microsoft.emmx" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="com.sec.android.app.sbrowser" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="com.opera.browser" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="com.opera.mini.native" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="com.vivaldi.browser" android:maxLongVersionCode="999999999" />
-    <compatibility-package android:name="com.duckduckgo.mobile.android" android:maxLongVersionCode="999999999" />
+        <!--
+            Chromium 137+ は compatibility-mode を廃止し、ネイティブ Android Autofill を使用する。
+            maxLongVersionCode を 136 系の最終バージョンに制限する（Google 公式推奨値）。
+            137 以降のユーザーはブラウザ設定で「別のサービスを使用して自動入力」を有効にする必要がある。
+        -->
+        <compatibility-package android:name="com.android.chrome" android:maxLongVersionCode="711900039" />
+        <compatibility-package android:name="com.chrome.beta" android:maxLongVersionCode="711900039" />
+        <compatibility-package android:name="com.chrome.dev" android:maxLongVersionCode="711900039" />
+        <compatibility-package android:name="com.chrome.canary" android:maxLongVersionCode="711900039" />
+        <compatibility-package android:name="com.brave.browser" android:maxLongVersionCode="711900039" />
+        <compatibility-package android:name="com.microsoft.emmx" android:maxLongVersionCode="711900039" />
+        <compatibility-package android:name="org.mozilla.firefox" android:maxLongVersionCode="999999999" />
+        <compatibility-package android:name="org.mozilla.firefox_beta" android:maxLongVersionCode="999999999" />
+        <compatibility-package android:name="com.sec.android.app.sbrowser" android:maxLongVersionCode="999999999" />
+        <compatibility-package android:name="com.opera.browser" android:maxLongVersionCode="999999999" />
+        <compatibility-package android:name="com.opera.mini.native" android:maxLongVersionCode="999999999" />
+        <compatibility-package android:name="com.vivaldi.browser" android:maxLongVersionCode="999999999" />
+        <compatibility-package android:name="com.duckduckgo.mobile.android" android:maxLongVersionCode="999999999" />
 </autofill-service>

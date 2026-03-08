@@ -37,7 +37,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -104,6 +103,8 @@ class SecureVaultAutofillService : AutofillService() {
         }
 
         val targets = smartFieldDetector.detect(structure)
+        // Chromium 137+ のブラウザ設定案内を初回のみ表示する。
+        showBrowserSettingsGuideIfNeeded(targetPackageName)
         logger.d(
             TAG,
             "onFillRequest: detected usernameId=${targets.usernameId}, passwordId=${targets.passwordId}, otpId=${targets.otpId}, webDomain=${targets.webDomain}"
@@ -230,6 +231,7 @@ class SecureVaultAutofillService : AutofillService() {
     private suspend fun resolveCredentials(packageName: String, webDomain: String?): List<Credential> {
         logger.d(TAG, "resolveCredentials: package=$packageName, webDomain=$webDomain")
 
+        // 1. パッケージ名で完全一致検索
         if (packageName.isNotBlank()) {
             val fromPackage = credentialRepository.findByPackageName(packageName)
             logger.d(TAG, "resolveCredentials: fromPackage=${fromPackage.size}")
@@ -238,6 +240,7 @@ class SecureVaultAutofillService : AutofillService() {
             }
         }
 
+        // 2. webDomain があれば URL 部分一致で検索
         if (!webDomain.isNullOrBlank()) {
             val fromUrl = credentialRepository.findByUrl(webDomain)
             logger.d(TAG, "resolveCredentials: fromUrl=${fromUrl.size} domain=$webDomain")
@@ -245,27 +248,107 @@ class SecureVaultAutofillService : AutofillService() {
                 return fromUrl.take(MAX_DATASET_ITEMS)
             }
 
-            val fromServiceSearch = credentialRepository.search(webDomain).first()
-            logger.d(TAG, "resolveCredentials: fromServiceSearch=${fromServiceSearch.size}")
-            if (fromServiceSearch.isNotEmpty()) {
-                return fromServiceSearch.take(MAX_DATASET_ITEMS)
+            // 3. serviceName / serviceUrl 横断でドメイン部分一致検索
+            val fromDomain = credentialRepository.findByDomain(webDomain)
+            logger.d(TAG, "resolveCredentials: fromDomain=${fromDomain.size} domain=$webDomain")
+            if (fromDomain.isNotEmpty()) {
+                return fromDomain.take(MAX_DATASET_ITEMS)
             }
 
+            // 4. メインドメインで検索
             val mainDomain = extractMainDomain(webDomain)
             if (!mainDomain.isNullOrBlank() && mainDomain != webDomain.lowercase()) {
-                val fromDomainSearch = credentialRepository.search(mainDomain).first()
+                val fromMainDomain = credentialRepository.findByDomain(mainDomain)
                 logger.d(
                     TAG,
-                    "resolveCredentials: fromDomainSearch=${fromDomainSearch.size} mainDomain=$mainDomain"
+                    "resolveCredentials: fromMainDomain=${fromMainDomain.size} mainDomain=$mainDomain"
                 )
-                if (fromDomainSearch.isNotEmpty()) {
-                    return fromDomainSearch.take(MAX_DATASET_ITEMS)
+                if (fromMainDomain.isNotEmpty()) {
+                    return fromMainDomain.take(MAX_DATASET_ITEMS)
+                }
+            }
+        }
+
+        // 5. webDomain がない場合、パッケージ名からサービス名を推測して検索
+        if (webDomain.isNullOrBlank() && packageName.isNotBlank()) {
+            val appName = packageName.substringAfterLast('.')
+            if (appName.isNotBlank() && appName.length >= 3) {
+                val fromAppName = credentialRepository.findByDomain(appName)
+                logger.d(TAG, "resolveCredentials: fromAppName=${fromAppName.size} appName=$appName")
+                if (fromAppName.isNotEmpty()) {
+                    return fromAppName.take(MAX_DATASET_ITEMS)
+                }
+            }
+
+            val parts = packageName.split(".")
+            val significantPart = parts.firstOrNull {
+                it.length >= 3 &&
+                    it != "com" &&
+                    it != "app" &&
+                    it != "android" &&
+                    it != "mobile" &&
+                    it != "client"
+            }
+            if (significantPart != null && significantPart != appName) {
+                val fromSignificant = credentialRepository.findByDomain(significantPart)
+                logger.d(
+                    TAG,
+                    "resolveCredentials: fromSignificant=${fromSignificant.size} part=$significantPart"
+                )
+                if (fromSignificant.isNotEmpty()) {
+                    return fromSignificant.take(MAX_DATASET_ITEMS)
                 }
             }
         }
 
         logger.d(TAG, "resolveCredentials: no match found")
         return emptyList()
+    }
+
+    /**
+     * Chromium ベースブラウザからの初回リクエスト時に、
+     * ブラウザ側の設定案内通知を表示する。
+     */
+    private fun showBrowserSettingsGuideIfNeeded(targetPackageName: String) {
+        if (targetPackageName !in CHROMIUM_BROWSER_PACKAGES) {
+            return
+        }
+
+        val prefs = getSharedPreferences(BROWSER_GUIDE_PREFS, MODE_PRIVATE)
+        val key = "guide_shown_$targetPackageName"
+        if (prefs.getBoolean(key, false)) {
+            return
+        }
+        prefs.edit().putBoolean(key, true).apply()
+
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        val notification = NotificationCompat.Builder(this, AUTOFILL_SAVE_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("ブラウザの自動入力設定")
+            .setContentText("ブラウザ設定 -> 自動入力サービス -> 別のサービスを使用 を有効にしてください")
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    "Chrome/Brave/Edge のバージョン137以降では、ブラウザ設定で別のサービスを使用して自動入力を有効にする必要があります。\n\nブラウザ -> 設定 -> 自動入力サービス -> 別のサービスを使用して自動入力 を選択してください。"
+                )
+            )
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+
+        runCatching {
+            NotificationManagerCompat.from(this).notify(
+                BROWSER_GUIDE_NOTIFICATION_ID + abs(targetPackageName.hashCode()),
+                notification
+            )
+        }.onFailure { throwable ->
+            logger.w(TAG, "Failed to show browser guide notification", throwable)
+        }
     }
 
     /**
@@ -618,6 +701,8 @@ class SecureVaultAutofillService : AutofillService() {
         const val OTP_REQUEST_CODE_BASE = 20000
         const val PLACEHOLDER_PASSWORD = "••••••••"
         const val LOCKED_LABEL_PREFIX = "\uD83D\uDD12 "
+        const val BROWSER_GUIDE_PREFS = "browser_guide_prefs"
+        const val BROWSER_GUIDE_NOTIFICATION_ID = 13000
 
         /** Autofill の対象から除外するパッケージ */
         val EXCLUDED_PACKAGES = setOf(
@@ -636,6 +721,16 @@ class SecureVaultAutofillService : AutofillService() {
             "com.roboform.android",
             "org.nicbit.robofill",
             "com.android.settings"
+        )
+
+        val CHROMIUM_BROWSER_PACKAGES = setOf(
+            "com.android.chrome",
+            "com.chrome.beta",
+            "com.chrome.dev",
+            "com.chrome.canary",
+            "com.brave.browser",
+            "com.microsoft.emmx",
+            "com.vivaldi.browser"
         )
     }
 }
