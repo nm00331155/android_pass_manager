@@ -408,6 +408,11 @@ class SecureVaultAutofillService : AutofillService() {
         credentials: List<Credential>,
         inlineRequest: InlineSuggestionsRequest?
     ): FillResponse? {
+        logger.d(
+            TAG,
+            "buildFillResponse: inlineRequest=${inlineRequest != null}, specsCount=${inlineRequest?.inlinePresentationSpecs?.size ?: 0}, maxSuggestionCount=${if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) inlineRequest?.maxSuggestionCount else null}"
+        )
+
         val saveInfo = createSaveInfo(targets.usernameId, targets.passwordId)
         if (credentials.isEmpty() && saveInfo == null && targets.otpId == null) {
             logger.d(TAG, "buildFillResponse: no dataset and no saveInfo")
@@ -426,7 +431,21 @@ class SecureVaultAutofillService : AutofillService() {
                     val inlinePresentation = createInlinePresentation(credential, inlineRequest, index)
                     if (inlinePresentation != null) {
                         datasetBuilder.setInlinePresentation(inlinePresentation)
+                        logger.d(
+                            TAG,
+                            "buildFillResponse: inlinePresentation set=true credentialId=${credential.id}"
+                        )
+                    } else {
+                        logger.d(
+                            TAG,
+                            "buildFillResponse: inlinePresentation set=false credentialId=${credential.id}"
+                        )
                     }
+                } else {
+                    logger.d(
+                        TAG,
+                        "buildFillResponse: inline skipped (api=${Build.VERSION.SDK_INT}, hasInlineRequest=${inlineRequest != null})"
+                    )
                 }
 
                 val authPendingIntent = createAuthenticationPendingIntent(
@@ -496,18 +515,26 @@ class SecureVaultAutofillService : AutofillService() {
     ): InlinePresentation? {
         val specs = inlineRequest.inlinePresentationSpecs
         if (specs.isEmpty()) {
+            logger.d(TAG, "createInlinePresentation: no inline specs")
             return null
         }
         val spec = if (index < specs.size) specs[index] else specs.last()
 
+        logger.d(
+            TAG,
+            "createInlinePresentation: index=$index, minSize=${spec.minSize}, maxSize=${spec.maxSize}, style=${spec.style}"
+        )
+
         return runCatching {
+            val intent = Intent(this, AutofillAuthActivity::class.java).apply {
+                putExtra(AutofillAuthActivity.EXTRA_CREDENTIAL_ID, credential.id)
+            }
+
             val pendingIntent = PendingIntent.getActivity(
                 this,
-                abs(credential.id.toInt()) + index,
-                Intent(this, AutofillAuthActivity::class.java).apply {
-                    putExtra(AutofillAuthActivity.EXTRA_CREDENTIAL_ID, credential.id)
-                },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                credential.id.toInt(),
+                intent,
+                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
             val slice = InlineSuggestionUi.newContentBuilder(pendingIntent)
@@ -516,9 +543,14 @@ class SecureVaultAutofillService : AutofillService() {
                 .build()
                 .slice
 
-            InlinePresentation(slice, spec, false)
+            InlinePresentation(slice, spec, false).also {
+                logger.d(
+                    TAG,
+                    "createInlinePresentation: success credentialId=${credential.id}"
+                )
+            }
         }.onFailure { throwable ->
-            logger.w(TAG, "Failed to create inline presentation", throwable)
+            logger.w(TAG, "createInlinePresentation: failed credentialId=${credential.id}", throwable)
         }.getOrNull()
     }
 

@@ -1,6 +1,6 @@
 # 作業状況
 
-最終更新: 2026-03-06 18:00:00 +09:00
+最終更新: 2026-03-08 13:26:48 +09:00
 
 ## 現在のフェーズ
 - Phase 1〜6: 全完了
@@ -27,6 +27,16 @@
 - `play-services-auth` 依存あり（SMS OTP 用）だが INTERNET 権限は Manifest で明示除去
 
 ## 本セッションで完了した作業
+- Android 15 / Galaxy S25 向け Autofill Inline 診断強化を実施
+  - 改修: `SecureVaultAutofillService.kt`
+    - `buildFillResponse` 冒頭に inlineRequest/specsCount/maxSuggestionCount ログを追加
+    - `buildFillResponse` の dataset 構築で inline set/skip ログを追加
+    - `createInlinePresentation` を全面更新（`PendingIntent.FLAG_MUTABLE or FLAG_UPDATE_CURRENT`、spec 診断ログ）
+  - ビルド: `.\gradlew.bat :app:assembleDebug` 成功
+  - 実機反映: `.\install_debug.bat` 実行成功
+  - 端末反映: `lastUpdateTime=2026-03-08 13:26:48`
+  - テスト: 未実施（今回依頼はビルド + インストール確認まで）
+
 - Phase 7 残タスク（バグ修正・テスト補強・docs更新・最終検証）を完了
   - 改修: `SecureVaultApplication.kt`（`System.loadLibrary("sqlcipher")` を `onCreate` 先頭へ追加）
   - 改修: `AndroidManifest.xml`（`tools` namespace 追加 + `INTERNET` 権限の明示除去）
