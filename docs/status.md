@@ -1,6 +1,6 @@
 # 作業状況
 
-最終更新: 2026-03-08 13:47:22 +09:00
+最終更新: 2026-03-08 20:00:28 +09:00
 
 ## 現在のフェーズ
 - Phase 1〜6: 全完了
@@ -27,6 +27,16 @@
 - `play-services-auth` 依存あり（SMS OTP 用）だが INTERNET 権限は Manifest で明示除去
 
 ## 本セッションで完了した作業
+- 指示書10対応: Autofill / Credential Provider の候補表示不具合を修正
+  - 改修: `KeyPassCredentialProviderService.kt`
+    - 空ユーザー名 credential をスキップするガードを追加
+    - `PasswordCredentialEntry` 生成を個別 try-catch 化し、1件の失敗で全体が失敗しないように修正
+  - 改修: `SecureVaultAutofillService.kt`
+    - `onFillRequest` を `runBlocking(Dispatchers.IO)` ベースの同期処理へ置換
+    - `serviceScope.launch` / `CancellationSignal` 連動キャンセル / デバッグ用Toast を削除
+    - `buildFillResponse` の username/password presentation を `R.layout.autofill_suggestion_item` へ変更
+  - 目的: Brave 等の短時間連続リクエストでも callback 未達を防止し、候補表示を安定化
+
 - Autofill 候補UI表示検証のため `buildFillResponse` を公式サンプル準拠へ修正
   - 改修: `SecureVaultAutofillService.kt`
     - `credentials.forEachIndexed` を `Dataset.Builder()` + 3引数 `setValue(AutofillId, AutofillValue, RemoteViews)` へ全面置換

@@ -37,12 +37,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 /**
@@ -85,6 +84,7 @@ class SecureVaultAutofillService : AutofillService() {
         callback: FillCallback
     ) {
         logger.d(TAG, "=== onFillRequest START ===")
+        logger.d(TAG, "onFillRequest: cancellationSignalCanceled=${cancellationSignal.isCanceled}")
 
         val structure = request.fillContexts.lastOrNull()?.structure
         if (structure == null) {
@@ -122,70 +122,46 @@ class SecureVaultAutofillService : AutofillService() {
             null
         }
 
-        val job = serviceScope.launch {
-            try {
-                if (targets.otpId != null) {
-                    runCatching {
-                        val status = smsOtpManager.startListening()
-                        logger.d(TAG, "SmsOtpManager start status=$status")
-                    }.onFailure { throwable ->
-                        logger.w(TAG, "Failed to start SMS OTP listener", throwable)
+        try {
+            if (targets.otpId != null) {
+                runCatching {
+                    runBlocking(Dispatchers.IO) {
+                        smsOtpManager.startListening()
                     }
+                }.onFailure { throwable ->
+                    logger.w(TAG, "Failed to start SMS OTP listener", throwable)
                 }
+            }
 
-                val credentials = if (targets.usernameId != null || targets.passwordId != null) {
+            val credentials = if (targets.usernameId != null || targets.passwordId != null) {
+                runBlocking(Dispatchers.IO) {
                     runCatching {
                         resolveCredentials(targetPackageName, targets.webDomain)
                     }.getOrElse { throwable ->
                         logger.e(TAG, "Failed to resolve autofill credentials", throwable)
                         emptyList()
                     }
-                } else {
-                    emptyList()
                 }
-
-                logger.d(TAG, "onFillRequest: resolved ${credentials.size} credentials")
-                credentials.forEachIndexed { index, credential ->
-                    logger.d(
-                        TAG,
-                        "onFillRequest: credential[$index] id=${credential.id}, service=${credential.serviceName}, user=${credential.username}"
-                    )
-                }
-
-                val response = buildFillResponse(targets, credentials, inlineRequest)
-                logger.d(TAG, "onFillRequest: responseBuilt=${response != null}")
-
-                if (!isActive) {
-                    logger.d(TAG, "onFillRequest: job already cancelled, skipping callback")
-                    return@launch
-                }
-
-                withContext(Dispatchers.Main) {
-                    // デバッグ確認用: サービス応答がOSに届いているかを可視化する。
-                    android.widget.Toast.makeText(
-                        applicationContext,
-                        "SecureVault: ${credentials.size}件の候補 (domain=${targets.webDomain})",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
-                    callback.onSuccess(response)
-                }
-                logger.d(TAG, "=== onFillRequest END (success) ===")
-            } catch (throwable: Throwable) {
-                if (throwable is CancellationException) {
-                    // キャンセル時は callback を返さず、OS 側のキャンセル処理に委ねる。
-                    logger.d(TAG, "onFillRequest: coroutine cancelled, not calling callback")
-                    return@launch
-                }
-                logger.e(TAG, "onFillRequest: exception", throwable)
-                withContext(Dispatchers.Main) {
-                    callback.onSuccess(null)
-                }
+            } else {
+                emptyList()
             }
-        }
 
-        cancellationSignal.setOnCancelListener {
-            logger.d(TAG, "onFillRequest: cancelled by signal")
-            job.cancel()
+            logger.d(TAG, "onFillRequest: resolved ${credentials.size} credentials")
+            credentials.forEachIndexed { index, credential ->
+                logger.d(
+                    TAG,
+                    "onFillRequest: credential[$index] id=${credential.id}, service=${credential.serviceName}, user=${credential.username}"
+                )
+            }
+
+            val response = buildFillResponse(targets, credentials, inlineRequest)
+            logger.d(TAG, "onFillRequest: responseBuilt=${response != null}")
+
+            callback.onSuccess(response)
+            logger.d(TAG, "=== onFillRequest END (success) ===")
+        } catch (throwable: Throwable) {
+            logger.e(TAG, "onFillRequest: exception", throwable)
+            callback.onSuccess(null)
         }
     }
 
@@ -425,14 +401,13 @@ class SecureVaultAutofillService : AutofillService() {
         credentials.forEachIndexed { index, credential ->
             try {
                 // 各フィールドごとに個別 presentation を指定し、認証なしで直接値を返す。
-                val usernamePresentation = RemoteViews(packageName, android.R.layout.simple_list_item_1).apply {
-                    setTextViewText(
-                        android.R.id.text1,
-                        "${credential.serviceName} - ${credential.username}"
-                    )
+                val usernamePresentation = RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
+                    setTextViewText(R.id.service_name, credential.serviceName)
+                    setTextViewText(R.id.username, credential.username)
                 }
-                val passwordPresentation = RemoteViews(packageName, android.R.layout.simple_list_item_1).apply {
-                    setTextViewText(android.R.id.text1, "パスワード (${credential.serviceName})")
+                val passwordPresentation = RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
+                    setTextViewText(R.id.service_name, credential.serviceName)
+                    setTextViewText(R.id.username, "パスワード")
                 }
 
                 val datasetBuilder = Dataset.Builder()

@@ -86,20 +86,36 @@ class KeyPassCredentialProviderService : CredentialProviderService() {
                         logger.d(TAG, "onBeginGetCredentialRequest: found ${credentials.size} credentials")
 
                         credentials.take(MAX_ENTRIES).forEach { credential ->
-                            credentialEntries.add(
-                                PasswordCredentialEntry.Builder(
-                                    applicationContext,
-                                    credential.username,
-                                    createGetPendingIntent(credential.id),
-                                    option
+                            if (credential.username.isBlank()) {
+                                logger.w(
+                                    TAG,
+                                    "onBeginGetCredentialRequest: SKIP credential id=${credential.id} service=${credential.serviceName} (empty username)"
                                 )
-                                    .setDisplayName(credential.serviceName)
-                                    .build()
-                            )
-                            logger.d(
-                                TAG,
-                                "onBeginGetCredentialRequest: added entry id=${credential.id}, user=${credential.username}, service=${credential.serviceName}"
-                            )
+                                return@forEach
+                            }
+
+                            try {
+                                credentialEntries.add(
+                                    PasswordCredentialEntry.Builder(
+                                        applicationContext,
+                                        credential.username,
+                                        createGetPendingIntent(credential.id),
+                                        option
+                                    )
+                                        .setDisplayName(credential.serviceName)
+                                        .build()
+                                )
+                                logger.d(
+                                    TAG,
+                                    "onBeginGetCredentialRequest: added entry id=${credential.id}, user=${credential.username}, service=${credential.serviceName}"
+                                )
+                            } catch (e: Exception) {
+                                logger.w(
+                                    TAG,
+                                    "onBeginGetCredentialRequest: failed to build entry id=${credential.id}",
+                                    e
+                                )
+                            }
                         }
                     }
 

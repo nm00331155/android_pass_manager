@@ -1,6 +1,6 @@
 # SecureVault 仕様書
 
-最終更新: 2026-03-08 13:47:22 +09:00
+最終更新: 2026-03-08 20:00:28 +09:00
 
 ## 1. アプリ概要
 - アプリ名: SecureVault（Android パスワードマネージャー）
@@ -100,6 +100,9 @@
   - 実装済み: `buildFillResponse` の credentials Dataset 構築を Android 公式サンプル準拠へ変更（`Dataset.Builder()` + `setValue(id, value, presentation)`）
   - 実装済み: 自動入力候補UI検証のため、認証ゲート（`setAuthentication`）を一時無効化して直接値入力へ変更
   - 実装済み: ドロップダウン表示安定化検証として presentation を `android.R.layout.simple_list_item_1` / `android.R.id.text1` に統一（OTP Dataset 含む）
+  - 実装済み: `onFillRequest` を同期レスポンス方式へ変更（`runBlocking(Dispatchers.IO)` で解決 -> `callback.onSuccess` を同スレッドで返却）
+  - 実装済み: `KeyPassCredentialProviderService` で空ユーザー名 credential をスキップし、`PasswordCredentialEntry` 生成失敗を個別 try-catch で隔離
+  - 実装済み: `buildFillResponse` の username/password presentation を `R.layout.autofill_suggestion_item` に復帰
 - Phase 5: 完了
   - 実装済み: `strings.xml` の全面日本語化（指定文言へ置換）
   - 実装済み: `SmsOtpManager`（`hasOngoingSmsRequest` -> `checkPermissionState` -> `startSmsCodeRetriever`）
