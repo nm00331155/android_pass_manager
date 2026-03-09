@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.securevault.app.data.crypto.CryptoEngine
 import com.securevault.app.data.crypto.DbKeyManager
+import com.securevault.app.data.db.DatabaseMigrations
 import com.securevault.app.data.db.SecureVaultDatabase
 import com.securevault.app.data.db.dao.CredentialDao
 import com.securevault.app.data.repository.CredentialRepository
@@ -42,7 +43,10 @@ object DatabaseModule {
             context,
             SecureVaultDatabase::class.java,
             SecureVaultDatabase.DATABASE_NAME
-        ).openHelperFactory(factory).build()
+        )
+            .openHelperFactory(factory)
+            .addMigrations(DatabaseMigrations.MIGRATION_1_2)
+            .build()
     }
 
     /**

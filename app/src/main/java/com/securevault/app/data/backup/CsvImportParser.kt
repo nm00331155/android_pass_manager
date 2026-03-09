@@ -1,6 +1,7 @@
 package com.securevault.app.data.backup
 
 import android.util.Log
+import com.securevault.app.data.repository.model.CredentialType
 import java.net.URI
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,7 +54,15 @@ class CsvImportParser @Inject constructor() {
             val fields = parseCsvLine(row)
 
             val password = fields.getOrNull(columns.passwordIndex).orEmpty().trim()
-            if (password.isBlank()) {
+            val credentialType = columns.credentialTypeIndex
+                ?.let { fields.getOrNull(it).orEmpty().trim() }
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::resolveCredentialType)
+                ?: if (password.isBlank()) CredentialType.ID_ONLY.name else CredentialType.PASSWORD.name
+            if (source != ImportSource.SECUREVAULT && password.isBlank()) {
+                return@mapNotNull null
+            }
+            if (credentialType == CredentialType.PASSKEY.name) {
                 return@mapNotNull null
             }
 
@@ -65,17 +74,26 @@ class CsvImportParser @Inject constructor() {
             val notes = columns.notesIndex
                 ?.let { fields.getOrNull(it).orEmpty().trim() }
                 ?.ifBlank { null }
+            val category = columns.categoryIndex
+                ?.let { fields.getOrNull(it).orEmpty().trim() }
+                ?.ifBlank { "other" }
+                ?: "other"
+
+            if (password.isBlank() && username.isBlank()) {
+                return@mapNotNull null
+            }
 
             val serviceName = resolveServiceName(rawServiceName, serviceUrl, source)
             BackupCredential(
                 serviceName = serviceName,
                 serviceUrl = serviceUrl,
                 username = username,
-                password = password,
+                password = password.ifBlank { null },
                 notes = notes,
-                category = "other",
+                category = category,
                 createdAt = now,
-                updatedAt = now
+                updatedAt = now,
+                credentialType = credentialType
             )
         }
     }
@@ -110,7 +128,9 @@ class CsvImportParser @Inject constructor() {
             serviceUrlIndex = findIndex(mapping.serviceUrl),
             usernameIndex = requireIndex(mapping.username),
             passwordIndex = requireIndex(mapping.password),
-            notesIndex = findIndex(mapping.notes)
+            notesIndex = findIndex(mapping.notes),
+            categoryIndex = findIndex(mapping.category),
+            credentialTypeIndex = findIndex(mapping.credentialType)
         )
     }
 
@@ -233,6 +253,12 @@ class CsvImportParser @Inject constructor() {
             URI(url).host?.takeIf { it.isNotBlank() } ?: url
         }.getOrDefault(url)
     }
+
+    private fun resolveCredentialType(rawValue: String): String {
+        return CredentialType.values().firstOrNull { it.name.equals(rawValue, ignoreCase = true) }
+            ?.name
+            ?: CredentialType.PASSWORD.name
+    }
 }
 
 /**
@@ -243,5 +269,7 @@ internal data class ResolvedColumns(
     val serviceUrlIndex: Int?,
     val usernameIndex: Int,
     val passwordIndex: Int,
-    val notesIndex: Int?
+    val notesIndex: Int?,
+    val categoryIndex: Int?,
+    val credentialTypeIndex: Int?
 )

@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.securevault.app.data.repository.CredentialRepository
 import com.securevault.app.data.repository.model.Credential
+import com.securevault.app.data.repository.model.CredentialType
+import com.securevault.app.data.repository.model.PasskeyData
 import com.securevault.app.util.PasswordStrength
 import com.securevault.app.util.PasswordStrengthChecker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -69,8 +71,8 @@ class AddEditViewModel @Inject constructor(
     private val _saveCompleted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val saveCompleted = _saveCompleted.asSharedFlow()
 
-    val isFormValid: StateFlow<Boolean> = combine(_serviceName, _password) { name, pass ->
-        name.isNotBlank() && pass.isNotBlank()
+    val isFormValid: StateFlow<Boolean> = combine(_serviceName, _username) { name, username ->
+        name.isNotBlank() && username.isNotBlank()
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -78,6 +80,7 @@ class AddEditViewModel @Inject constructor(
     )
 
     private var createdAtMillis: Long = System.currentTimeMillis()
+    private var existingPasskeyData: PasskeyData? = null
 
     init {
         if (isEditMode) {
@@ -156,17 +159,24 @@ class AddEditViewModel @Inject constructor(
             _errorMessage.value = null
 
             val now = System.currentTimeMillis()
+            val normalizedPassword = _password.value.takeIf { it.isNotBlank() }
             val payload = Credential(
                 id = if (isEditMode) credentialId else 0L,
                 serviceName = _serviceName.value.trim(),
                 serviceUrl = _serviceUrl.value.trim().ifBlank { null },
                 username = _username.value.trim(),
-                password = _password.value,
+                password = normalizedPassword,
                 notes = _notes.value.ifBlank { null },
                 category = _category.value,
                 createdAt = createdAtMillis,
                 updatedAt = now,
-                isFavorite = _isFavorite.value
+                isFavorite = _isFavorite.value,
+                passkeyData = existingPasskeyData,
+                credentialType = when {
+                    existingPasskeyData != null -> CredentialType.PASSKEY
+                    normalizedPassword.isNullOrBlank() -> CredentialType.ID_ONLY
+                    else -> CredentialType.PASSWORD
+                }
             )
 
             runCatching {
@@ -197,11 +207,12 @@ class AddEditViewModel @Inject constructor(
                     _serviceName.value = credential.serviceName
                     _serviceUrl.value = credential.serviceUrl.orEmpty()
                     _username.value = credential.username
-                    _password.value = credential.password
+                    _password.value = credential.password.orEmpty()
                     _notes.value = credential.notes.orEmpty()
                     _category.value = credential.category
                     _isFavorite.value = credential.isFavorite
-                    _passwordStrength.value = PasswordStrengthChecker.check(credential.password)
+                    _passwordStrength.value = PasswordStrengthChecker.check(credential.password.orEmpty())
+                    existingPasskeyData = credential.passkeyData
                     createdAtMillis = credential.createdAt
                 }
         }

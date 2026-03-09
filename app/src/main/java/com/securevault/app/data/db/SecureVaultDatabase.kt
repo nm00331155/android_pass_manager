@@ -10,7 +10,7 @@ import com.securevault.app.data.db.entity.CredentialEntity
  */
 @Database(
     entities = [CredentialEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class SecureVaultDatabase : RoomDatabase() {

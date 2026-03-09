@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.securevault.app.R
+import com.securevault.app.data.repository.model.Credential
 import com.securevault.app.ui.component.ConfirmDialog
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -80,7 +81,7 @@ fun DetailScreen(
                     }
                 },
                 actions = {
-                    credential?.let { current ->
+                    credential?.takeUnless { it.isPasskey }?.let { current ->
                         TextButton(onClick = { onEditClick(current.id) }) {
                             Text(text = stringResource(R.string.edit_action))
                         }
@@ -115,7 +116,9 @@ fun DetailScreen(
             DetailRow(
                 title = stringResource(R.string.field_url),
                 value = currentCredential.serviceUrl.orEmpty(),
-                actionLabel = stringResource(R.string.open_in_browser),
+                actionLabel = currentCredential.serviceUrl
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { stringResource(R.string.open_in_browser) },
                 onAction = {
                     val url = currentCredential.serviceUrl.orEmpty()
                     if (url.isBlank()) {
@@ -139,25 +142,46 @@ fun DetailScreen(
                 }
             )
 
-            val maskedPassword = "*".repeat(max(8, currentCredential.password.length))
             DetailRow(
-                title = stringResource(R.string.field_password_required),
-                value = if (passwordVisible) currentCredential.password else maskedPassword,
-                actionLabel = if (passwordVisible) {
-                    stringResource(R.string.hide_password)
-                } else {
-                    stringResource(R.string.show_password)
-                },
-                secondaryActionLabel = stringResource(R.string.copy_action),
-                onAction = viewModel::togglePasswordVisibility,
-                onSecondaryAction = {
-                    viewModel.copyToClipboard(
-                        context = context,
-                        text = currentCredential.password,
-                        label = passwordCopiedLabel
+                title = stringResource(R.string.field_credential_type),
+                value = credentialTypeLabel(currentCredential)
+            )
+
+            if (currentCredential.hasPassword) {
+                val password = currentCredential.password.orEmpty()
+                val maskedPassword = "*".repeat(max(8, password.length))
+                DetailRow(
+                    title = stringResource(R.string.field_password_required),
+                    value = if (passwordVisible) password else maskedPassword,
+                    actionLabel = if (passwordVisible) {
+                        stringResource(R.string.hide_password)
+                    } else {
+                        stringResource(R.string.show_password)
+                    },
+                    secondaryActionLabel = stringResource(R.string.copy_action),
+                    onAction = viewModel::togglePasswordVisibility,
+                    onSecondaryAction = {
+                        viewModel.copyToClipboard(
+                            context = context,
+                            text = password,
+                            label = passwordCopiedLabel
+                        )
+                    }
+                )
+            }
+
+            currentCredential.passkeyData?.let { passkeyData ->
+                DetailRow(
+                    title = stringResource(R.string.field_passkey_rp_id),
+                    value = passkeyData.rpId
+                )
+                passkeyData.origin?.takeIf { it.isNotBlank() }?.let { origin ->
+                    DetailRow(
+                        title = stringResource(R.string.field_url),
+                        value = origin
                     )
                 }
-            )
+            }
 
             if (!currentCredential.notes.isNullOrBlank()) {
                 DetailRow(
@@ -170,7 +194,7 @@ fun DetailScreen(
 
             DetailRow(
                 title = stringResource(R.string.field_category),
-                value = currentCredential.category
+                value = categoryLabel(currentCredential.category)
             )
             DetailRow(
                 title = stringResource(R.string.created_at),
@@ -246,4 +270,19 @@ private fun DetailRow(
 private fun formatDate(timestamp: Long): String {
     val format = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
     return format.format(Date(timestamp))
+}
+
+@Composable
+private fun credentialTypeLabel(credential: Credential): String = when {
+    credential.isPasskey -> stringResource(R.string.credential_type_passkey)
+    credential.hasPassword -> stringResource(R.string.credential_type_password)
+    else -> stringResource(R.string.credential_type_id_only)
+}
+
+@Composable
+private fun categoryLabel(category: String): String = when (category) {
+    "login" -> stringResource(R.string.category_login)
+    "finance" -> stringResource(R.string.category_finance)
+    "social" -> stringResource(R.string.category_social)
+    else -> stringResource(R.string.category_other)
 }

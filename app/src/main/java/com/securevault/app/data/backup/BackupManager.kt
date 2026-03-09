@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Base64
 import com.securevault.app.data.repository.CredentialRepository
 import com.securevault.app.data.repository.model.Credential
+import com.securevault.app.data.repository.model.CredentialType
 import com.securevault.app.util.AppLogger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedReader
@@ -103,26 +104,28 @@ class BackupManager @Inject constructor(
      */
     suspend fun exportCsv(outputUri: Uri): Int = withContext(Dispatchers.IO) {
         val credentials = credentialRepository.getAll().first()
-        if (credentials.isEmpty()) return@withContext 0
+        val exportableCredentials = credentials.filter { it.credentialType != CredentialType.PASSKEY }
+        if (exportableCredentials.isEmpty()) return@withContext 0
 
         context.contentResolver.openOutputStream(outputUri)?.use { outputStream ->
             OutputStreamWriter(outputStream, Charsets.UTF_8).use { writer ->
-                writer.write("serviceName,serviceUrl,username,password,notes,category\n")
-                credentials.forEach { credential ->
+                writer.write("serviceName,serviceUrl,username,password,notes,category,credentialType\n")
+                exportableCredentials.forEach { credential ->
                     val line = listOf(
                         credential.serviceName,
                         credential.serviceUrl.orEmpty(),
                         credential.username,
-                        credential.password,
+                        credential.password.orEmpty(),
                         credential.notes.orEmpty(),
-                        credential.category
+                        credential.category,
+                        credential.credentialType.name
                     ).joinToString(",") { escapeCsvField(it) }
                     writer.write("$line\n")
                 }
             }
         } ?: throw java.io.IOException("出力ストリームを開けませんでした")
 
-        credentials.size
+        exportableCredentials.size
     }
 
     /**
@@ -161,14 +164,14 @@ class BackupManager @Inject constructor(
         }
 
         val existingCredentials = credentialRepository.getAll().first()
-        val existingMap = existingCredentials.groupBy { keyOf(it.serviceName, it.username) }
+        val existingMap = existingCredentials.groupBy(::keyOf)
 
         val toInsert = mutableListOf<Credential>()
         val pendingInsertByKey = linkedMapOf<String, Credential>()
         val pendingUpdateById = linkedMapOf<Long, Credential>()
 
         for (backup in backupList) {
-            val key = keyOf(backup.serviceName, backup.username)
+            val key = keyOf(backup)
             val existing = existingMap[key]?.firstOrNull()
             val candidate = backup.toCredential()
 
@@ -218,8 +221,28 @@ class BackupManager @Inject constructor(
         return toInsert.size + pendingUpdateById.size
     }
 
-    private fun keyOf(serviceName: String, username: String): String {
-        return "$serviceName||$username"
+    private fun keyOf(credential: Credential): String {
+        return buildString {
+            append(credential.serviceName)
+            append("||")
+            append(credential.username)
+            append("||")
+            append(credential.credentialType.name)
+            append("||")
+            append(credential.passkeyData?.rpId.orEmpty())
+        }
+    }
+
+    private fun keyOf(credential: BackupCredential): String {
+        return buildString {
+            append(credential.serviceName)
+            append("||")
+            append(credential.username)
+            append("||")
+            append(credential.credentialType)
+            append("||")
+            append(credential.passkeyData?.rpId.orEmpty())
+        }
     }
 
     private fun readTextFromUri(inputUri: Uri): String {

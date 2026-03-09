@@ -23,9 +23,9 @@
     <string name="autofill_save_notification_message">%1$s を KeyPass に保存しました</string>
 
     <!-- ホーム画面 -->
-    <string name="home_title">パスワード一覧</string>
-    <string name="add_edit_title_add">パスワードを追加</string>
-    <string name="add_edit_title_edit">パスワードを編集</string>
+    <string name="home_title">認証情報一覧</string>
+    <string name="add_edit_title_add">認証情報を追加</string>
+    <string name="add_edit_title_edit">認証情報を編集</string>
     <string name="detail_title">詳細</string>
     <string name="settings_title">設定</string>
     <string name="generator_title">パスワード生成</string>
@@ -39,10 +39,10 @@
 
     <!-- 検索・フィルタ -->
     <string name="search_action">検索</string>
-    <string name="search_placeholder">サービス名やユーザー名で検索</string>
-    <string name="password_count">%1$d 件のパスワード</string>
-    <string name="home_empty_message">最初のパスワードを追加しましょう</string>
-    <string name="home_filter_empty_message">条件に一致するパスワードはありません</string>
+    <string name="search_placeholder">サービス名やユーザー名、IDで検索</string>
+    <string name="password_count">%1$d 件の認証情報</string>
+    <string name="home_empty_message">最初の認証情報を追加しましょう</string>
+    <string name="home_filter_empty_message">条件に一致する認証情報はありません</string>
     <string name="filter_reset">フィルタをリセット</string>
     <string name="home_swipe_hint">右スワイプ: お気に入り / 左スワイプ: 削除</string>
 
@@ -58,9 +58,13 @@
     <string name="field_service_name_required">サービス名（必須）</string>
     <string name="field_url">URL</string>
     <string name="field_username">ユーザー名</string>
-    <string name="field_password_required">パスワード（必須）</string>
+    <string name="field_username_required">ユーザー名 / ID（必須）</string>
+    <string name="field_password_required">パスワード</string>
+    <string name="field_password_optional">パスワード（任意）</string>
     <string name="field_notes">メモ</string>
     <string name="field_category">カテゴリ</string>
+    <string name="field_credential_type">種類</string>
+    <string name="field_passkey_rp_id">RP ID</string>
 
     <!-- 保存・操作 -->
     <string name="save_action">保存</string>
@@ -77,6 +81,9 @@
     <string name="open_in_browser">ブラウザで開く</string>
     <string name="created_at">作成日時</string>
     <string name="updated_at">更新日時</string>
+    <string name="credential_type_password">パスワード</string>
+    <string name="credential_type_id_only">IDのみ</string>
+    <string name="credential_type_passkey">パスキー</string>
 
     <!-- パスワード生成 -->
     <string name="regenerate_action">再生成</string>
@@ -102,6 +109,7 @@
     <string name="settings_notification_otp">通知からの OTP 読取</string>
     <string name="settings_clipboard_otp">クリップボードの OTP 検出</string>
     <string name="settings_export_log">診断ログをエクスポート</string>
+    <string name="settings_autofill_browser_note">Chrome / Brave / Edge では、ブラウザ設定の「自動入力サービス」から「別のサービスを使用して自動入力」を有効にしてください。</string>
     <string name="settings_log_exported">ログを出力しました</string>
 
     <!-- タイムアウト -->
@@ -119,9 +127,9 @@
 
     <!-- 確認ダイアログ -->
     <string name="confirm_delete_title">削除の確認</string>
-    <string name="confirm_delete_message">このパスワードを削除しますか？この操作は取り消せません。</string>
+    <string name="confirm_delete_message">この認証情報を削除しますか？この操作は取り消せません。</string>
     <string name="confirm_delete_all_title">全データの削除</string>
-    <string name="confirm_delete_all_message">すべてのパスワードを削除しますか？この操作は取り消せません。</string>
+    <string name="confirm_delete_all_message">すべての認証情報を削除しますか？この操作は取り消せません。</string>
     <string name="confirm_delete_all_final">本当に削除してよろしいですか？元に戻すことはできません。</string>
     <string name="confirm_yes">はい</string>
     <string name="confirm_no">いいえ</string>
@@ -135,6 +143,7 @@
 
     <!-- OTP -->
     <string name="otp_sms_suggestion">SMS から認証コードを自動入力</string>
+    <string name="otp_waiting_for_code">認証コードを待機しています</string>
     <string name="otp_detected">認証コードを検出しました: %1$s</string>
     <string name="otp_clipboard_detected">クリップボードから認証コードを検出しました</string>
 

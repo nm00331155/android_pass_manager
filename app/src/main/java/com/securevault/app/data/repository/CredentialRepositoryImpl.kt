@@ -5,6 +5,8 @@ import com.securevault.app.data.crypto.EncryptedData
 import com.securevault.app.data.db.dao.CredentialDao
 import com.securevault.app.data.db.entity.CredentialEntity
 import com.securevault.app.data.repository.model.Credential
+import com.securevault.app.data.repository.model.CredentialType
+import com.securevault.app.data.repository.model.PasskeyData
 import com.securevault.app.util.AppLogger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -153,8 +155,16 @@ class CredentialRepositoryImpl @Inject constructor(
 
     private fun Credential.toEntity(createdAt: Long, updatedAt: Long): CredentialEntity {
         val usernameEncrypted = encryptValue(username)
-        val passwordEncrypted = encryptValue(password)
+        val normalizedType = normalizedCredentialType()
+        val passwordEncrypted = password
+            ?.takeIf { it.isNotBlank() }
+            ?.let { encryptValue(it) }
         val notesEncrypted = notes?.let { encryptValue(it) }
+        val passkeyPrivateKeyEncrypted = passkeyData?.privateKey?.let { encryptValue(it) }
+        val passkeyUserHandleEncrypted = passkeyData?.userHandle?.let { encryptValue(it) }
+        val passkeyDisplayNameEncrypted = passkeyData?.userDisplayName
+            ?.takeIf { it.isNotBlank() }
+            ?.let { encryptValue(it) }
 
         return CredentialEntity(
             id = id,
@@ -163,23 +173,68 @@ class CredentialRepositoryImpl @Inject constructor(
             packageName = packageName,
             encryptedUsername = usernameEncrypted.cipherText,
             usernameIv = usernameEncrypted.iv,
-            encryptedPassword = passwordEncrypted.cipherText,
-            passwordIv = passwordEncrypted.iv,
+            encryptedPassword = passwordEncrypted?.cipherText,
+            passwordIv = passwordEncrypted?.iv,
             encryptedNotes = notesEncrypted?.cipherText,
             notesIv = notesEncrypted?.iv,
             category = category,
             createdAt = createdAt,
             updatedAt = updatedAt,
-            isFavorite = isFavorite
+            isFavorite = isFavorite,
+            credentialType = normalizedType.name,
+            passkeyCredentialId = passkeyData?.credentialId,
+            passkeyPublicKey = passkeyData?.publicKey,
+            encryptedPasskeyPrivateKey = passkeyPrivateKeyEncrypted?.cipherText,
+            passkeyPrivateKeyIv = passkeyPrivateKeyEncrypted?.iv,
+            encryptedPasskeyUserHandle = passkeyUserHandleEncrypted?.cipherText,
+            passkeyUserHandleIv = passkeyUserHandleEncrypted?.iv,
+            passkeyRpId = passkeyData?.rpId,
+            passkeyOrigin = passkeyData?.origin,
+            passkeySignCount = passkeyData?.signCount ?: 0,
+            encryptedPasskeyDisplayName = passkeyDisplayNameEncrypted?.cipherText,
+            passkeyDisplayNameIv = passkeyDisplayNameEncrypted?.iv
         )
     }
 
     private fun CredentialEntity.toDomainOrNull(): Credential? {
         return runCatching {
             val username = decryptValue(encryptedUsername, usernameIv)
-            val password = decryptValue(encryptedPassword, passwordIv)
+            val password = decryptOptionalValue(encryptedPassword, passwordIv)
             val notes = if (!encryptedNotes.isNullOrBlank() && !notesIv.isNullOrBlank()) {
                 decryptValue(encryptedNotes, notesIv)
+            } else {
+                null
+            }
+            val resolvedType = credentialType.toCredentialType(
+                hasPassword = !encryptedPassword.isNullOrBlank(),
+                hasPasskey = !passkeyCredentialId.isNullOrBlank()
+            )
+            val passkeyData = if (!passkeyCredentialId.isNullOrBlank()) {
+                PasskeyData(
+                    credentialId = passkeyCredentialId,
+                    publicKey = passkeyPublicKey
+                        ?: error("passkeyPublicKey is missing for id=$id"),
+                    privateKey = decryptValue(
+                        encryptedPasskeyPrivateKey
+                            ?: error("encryptedPasskeyPrivateKey is missing for id=$id"),
+                        passkeyPrivateKeyIv
+                            ?: error("passkeyPrivateKeyIv is missing for id=$id")
+                    ),
+                    userHandle = decryptValue(
+                        encryptedPasskeyUserHandle
+                            ?: error("encryptedPasskeyUserHandle is missing for id=$id"),
+                        passkeyUserHandleIv
+                            ?: error("passkeyUserHandleIv is missing for id=$id")
+                    ),
+                    rpId = passkeyRpId
+                        ?: error("passkeyRpId is missing for id=$id"),
+                    origin = passkeyOrigin,
+                    signCount = passkeySignCount,
+                    userDisplayName = decryptOptionalValue(
+                        encryptedPasskeyDisplayName,
+                        passkeyDisplayNameIv
+                    )
+                )
             } else {
                 null
             }
@@ -195,11 +250,21 @@ class CredentialRepositoryImpl @Inject constructor(
                 category = category,
                 createdAt = createdAt,
                 updatedAt = updatedAt,
-                isFavorite = isFavorite
+                isFavorite = isFavorite,
+                passkeyData = passkeyData,
+                credentialType = resolvedType
             )
         }.onFailure { throwable ->
             logger.e(TAG, "DECRYPT FAILED id=$id service=$serviceName", throwable)
         }.getOrNull()
+    }
+
+    private fun Credential.normalizedCredentialType(): CredentialType {
+        return when {
+            passkeyData != null -> CredentialType.PASSKEY
+            password.isNullOrBlank() -> CredentialType.ID_ONLY
+            else -> credentialType
+        }
     }
 
     private fun encryptValue(value: String): EncryptedValue {
@@ -220,6 +285,22 @@ class CredentialRepositoryImpl @Inject constructor(
             EncryptedData(cipherText = cipherTextBytes, iv = ivBytes),
             decryptCipher
         )
+    }
+
+    private fun decryptOptionalValue(cipherTextBase64: String?, ivBase64: String?): String? {
+        if (cipherTextBase64.isNullOrBlank() || ivBase64.isNullOrBlank()) {
+            return null
+        }
+        return decryptValue(cipherTextBase64, ivBase64)
+    }
+
+    private fun String.toCredentialType(hasPassword: Boolean, hasPasskey: Boolean): CredentialType {
+        return CredentialType.values().firstOrNull { it.name == this }
+            ?: when {
+                hasPasskey -> CredentialType.PASSKEY
+                hasPassword -> CredentialType.PASSWORD
+                else -> CredentialType.ID_ONLY
+            }
     }
 
     private data class EncryptedValue(

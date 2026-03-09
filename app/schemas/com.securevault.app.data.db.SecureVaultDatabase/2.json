@@ -1,0 +1,165 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "646c8f4aeb2ef31dbe4be1e9b7bd7e6a",
+    "entities": [
+      {
+        "tableName": "credentials",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `serviceName` TEXT NOT NULL, `serviceUrl` TEXT, `packageName` TEXT, `encryptedUsername` TEXT NOT NULL, `usernameIv` TEXT NOT NULL, `encryptedPassword` TEXT, `passwordIv` TEXT, `encryptedNotes` TEXT, `notesIv` TEXT, `category` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `isFavorite` INTEGER NOT NULL, `credentialType` TEXT NOT NULL, `passkeyCredentialId` TEXT, `passkeyPublicKey` TEXT, `encryptedPasskeyPrivateKey` TEXT, `passkeyPrivateKeyIv` TEXT, `encryptedPasskeyUserHandle` TEXT, `passkeyUserHandleIv` TEXT, `passkeyRpId` TEXT, `passkeyOrigin` TEXT, `passkeySignCount` INTEGER NOT NULL, `encryptedPasskeyDisplayName` TEXT, `passkeyDisplayNameIv` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serviceName",
+            "columnName": "serviceName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serviceUrl",
+            "columnName": "serviceUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "packageName",
+            "columnName": "packageName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "encryptedUsername",
+            "columnName": "encryptedUsername",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usernameIv",
+            "columnName": "usernameIv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "encryptedPassword",
+            "columnName": "encryptedPassword",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "passwordIv",
+            "columnName": "passwordIv",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "encryptedNotes",
+            "columnName": "encryptedNotes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "notesIv",
+            "columnName": "notesIv",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFavorite",
+            "columnName": "isFavorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "credentialType",
+            "columnName": "credentialType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "passkeyCredentialId",
+            "columnName": "passkeyCredentialId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "passkeyPublicKey",
+            "columnName": "passkeyPublicKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "encryptedPasskeyPrivateKey",
+            "columnName": "encryptedPasskeyPrivateKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "passkeyPrivateKeyIv",
+            "columnName": "passkeyPrivateKeyIv",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "encryptedPasskeyUserHandle",
+            "columnName": "encryptedPasskeyUserHandle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "passkeyUserHandleIv",
+            "columnName": "passkeyUserHandleIv",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "passkeyRpId",
+            "columnName": "passkeyRpId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "passkeyOrigin",
+            "columnName": "passkeyOrigin",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "passkeySignCount",
+            "columnName": "passkeySignCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "encryptedPasskeyDisplayName",
+            "columnName": "encryptedPasskeyDisplayName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "passkeyDisplayNameIv",
+            "columnName": "passkeyDisplayNameIv",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '646c8f4aeb2ef31dbe4be1e9b7bd7e6a')"
+    ]
+  }
+}

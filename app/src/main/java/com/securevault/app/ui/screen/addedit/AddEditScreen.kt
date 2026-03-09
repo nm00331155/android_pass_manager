@@ -119,14 +119,14 @@ fun AddEditScreen(
             OutlinedTextField(
                 value = username,
                 onValueChange = viewModel::updateUsername,
-                label = { Text(text = stringResource(R.string.field_username)) },
+                label = { Text(text = stringResource(R.string.field_username_required)) },
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
                 value = password,
                 onValueChange = viewModel::updatePassword,
-                label = { Text(text = stringResource(R.string.field_password_required)) },
+                label = { Text(text = stringResource(R.string.field_password_optional)) },
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = if (passwordVisible) {
                     VisualTransformation.None
@@ -144,8 +144,10 @@ fun AddEditScreen(
                         )
                     }
                 },
-                supportingText = {
-                    PasswordStrengthBar(strength = passwordStrength)
+                supportingText = if (password.isNotBlank()) {
+                    { PasswordStrengthBar(strength = passwordStrength) }
+                } else {
+                    null
                 }
             )
 

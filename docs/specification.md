@@ -103,6 +103,12 @@
   - 実装済み: `onFillRequest` を同期レスポンス方式へ変更（`runBlocking(Dispatchers.IO)` で解決 -> `callback.onSuccess` を同スレッドで返却）
   - 実装済み: `KeyPassCredentialProviderService` で空ユーザー名 credential をスキップし、`PasswordCredentialEntry` 生成失敗を個別 try-catch で隔離
   - 実装済み: `buildFillResponse` の username/password presentation を `R.layout.autofill_suggestion_item` に復帰
+  - 実装済み: `AutofillCredentialMatcher` を追加し、`packageName` / URL / ドメイン / サービス名断片 / アプリ表示名を横断スコアリングして高信頼一致のみ返却
+  - 実装済み: 汎用フォールバック一覧を廃止し、対象アプリ/対象ドメインと関係ない候補を表示しない構成へ変更
+  - 実装済み: `SmartFieldDetector` の日本語キーワードを拡張し、ログインID / メール / パスワード / 認証コード系フィールド検出を強化
+  - 実装済み: `AssistStructure.WindowNode.title` を収集し、ブラウザで `webDomain` が取れない場合でも page title を照合ラベルとして利用
+  - 実装済み: `buildFillResponse` を認証ゲート付き Dataset に戻し、候補選択後に `AutofillAuthActivity` の生体認証を通してから自動入力するフローへ復帰
+  - 実装済み: 認証成功時に `packageName` / `webDomain` の未保存関連付けを学習し、次回以降の一致精度を改善
 - Phase 5: 完了
   - 実装済み: `strings.xml` の全面日本語化（指定文言へ置換）
   - 実装済み: `SmsOtpManager`（`hasOngoingSmsRequest` -> `checkPermissionState` -> `startSmsCodeRetriever`）

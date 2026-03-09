@@ -173,6 +173,12 @@ fun SettingsScreen(
                 Text(text = stringResource(R.string.open_autofill_settings))
             }
 
+            Text(
+                text = stringResource(R.string.settings_autofill_browser_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
             OutlinedButton(
                 onClick = onNavigateToBackup,
                 modifier = Modifier.fillMaxWidth()

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.service.autofill.Dataset
+import android.service.autofill.FillResponse
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillManager
 import android.view.autofill.AutofillValue
@@ -45,10 +46,13 @@ class AutofillAuthActivity : FragmentActivity() {
         val credentialId = intent.getLongExtra(EXTRA_CREDENTIAL_ID, INVALID_CREDENTIAL_ID)
         val usernameAutofillId = getAutofillIdExtra(EXTRA_USERNAME_AUTOFILL_ID)
         val passwordAutofillId = getAutofillIdExtra(EXTRA_PASSWORD_AUTOFILL_ID)
+        val targetPackageName = intent.getStringExtra(EXTRA_TARGET_PACKAGE_NAME).orEmpty()
+        val targetWebDomain = intent.getStringExtra(EXTRA_TARGET_WEB_DOMAIN)
+        val authResultMode = intent.getStringExtra(EXTRA_AUTH_RESULT_MODE) ?: AUTH_RESULT_DATASET
 
         logger.d(
             TAG,
-            "AutofillAuthActivity args: credentialId=$credentialId, usernameAutofillId=$usernameAutofillId, passwordAutofillId=$passwordAutofillId"
+            "AutofillAuthActivity args: credentialId=$credentialId, usernameAutofillId=$usernameAutofillId, passwordAutofillId=$passwordAutofillId, targetPackage=$targetPackageName, targetWebDomain=$targetWebDomain, authResultMode=$authResultMode"
         )
 
         if (credentialId == INVALID_CREDENTIAL_ID || (usernameAutofillId == null && passwordAutofillId == null)) {
@@ -66,7 +70,10 @@ class AutofillAuthActivity : FragmentActivity() {
                 completeWithCredential(
                     credentialId = credentialId,
                     usernameAutofillId = usernameAutofillId,
-                    passwordAutofillId = passwordAutofillId
+                    passwordAutofillId = passwordAutofillId,
+                    targetPackageName = targetPackageName,
+                    targetWebDomain = targetWebDomain,
+                    authResultMode = authResultMode
                 )
             },
             onError = { errorMessage ->
@@ -82,7 +89,10 @@ class AutofillAuthActivity : FragmentActivity() {
     private fun completeWithCredential(
         credentialId: Long,
         usernameAutofillId: AutofillId?,
-        passwordAutofillId: AutofillId?
+        passwordAutofillId: AutofillId?,
+        targetPackageName: String,
+        targetWebDomain: String?,
+        authResultMode: String
     ) {
         lifecycleScope.launch {
             val credential = runCatching {
@@ -97,34 +107,98 @@ class AutofillAuthActivity : FragmentActivity() {
                 return@launch
             }
 
-            logger.d(
-                TAG,
-                "Loaded credential: service=${credential.serviceName}, user=${credential.username}, passwordLen=${credential.password.length}"
+            maybeLearnTargetAssociation(
+                credential = credential,
+                targetPackageName = targetPackageName,
+                targetWebDomain = targetWebDomain
             )
 
-            val dataset = Dataset.Builder(
-                RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
-                    setTextViewText(R.id.service_name, credential.serviceName)
-                    setTextViewText(R.id.username, credential.username)
-                }
-            ).apply {
+            logger.d(
+                TAG,
+                "Loaded credential: service=${credential.serviceName}, user=${credential.username}, hasPassword=${credential.hasPassword}, isPasskey=${credential.isPasskey}"
+            )
+
+            val datasetBuilder = if (authResultMode == AUTH_RESULT_FILL_RESPONSE) {
+                Dataset.Builder()
+            } else {
+                Dataset.Builder(
+                    RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
+                        setTextViewText(R.id.service_name, credential.serviceName)
+                        setTextViewText(R.id.username, credential.username)
+                    }
+                )
+            }
+
+            val dataset = datasetBuilder.apply {
                 usernameAutofillId?.let { autofillId ->
                     setValue(autofillId, AutofillValue.forText(credential.username))
                     logger.d(TAG, "Set username for autofillId=$autofillId")
                 }
-                passwordAutofillId?.let { autofillId ->
-                    setValue(autofillId, AutofillValue.forText(credential.password))
-                    logger.d(TAG, "Set password for autofillId=$autofillId")
+                credential.password?.takeIf { it.isNotBlank() }?.let { password ->
+                    passwordAutofillId?.let { autofillId ->
+                        setValue(autofillId, AutofillValue.forText(password))
+                        logger.d(TAG, "Set password for autofillId=$autofillId")
+                    }
                 }
             }.build()
 
+            val authResult = if (authResultMode == AUTH_RESULT_FILL_RESPONSE) {
+                FillResponse.Builder()
+                    .addDataset(dataset)
+                    .build()
+            } else {
+                dataset
+            }
+
             val resultIntent = Intent().apply {
-                putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset)
+                putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, authResult)
             }
             setResult(Activity.RESULT_OK, resultIntent)
-            logger.d(TAG, "=== AutofillAuthActivity returning RESULT_OK ===")
+            logger.d(TAG, "=== AutofillAuthActivity returning RESULT_OK mode=$authResultMode ===")
             finish()
         }
+    }
+
+    private suspend fun maybeLearnTargetAssociation(
+        credential: com.securevault.app.data.repository.model.Credential,
+        targetPackageName: String,
+        targetWebDomain: String?
+    ) {
+        val normalizedPackage = targetPackageName.trim()
+        val normalizedWebDomain = normalizeWebDomain(targetWebDomain)
+        val packageToSave = normalizedPackage.takeIf {
+            it.isNotBlank() && it !in CHROMIUM_BROWSER_PACKAGES && it != packageName
+        }
+        val shouldUpdatePackage = credential.packageName.isNullOrBlank() && !packageToSave.isNullOrBlank()
+        val shouldUpdateDomain = credential.serviceUrl.isNullOrBlank() && !normalizedWebDomain.isNullOrBlank()
+
+        if (!shouldUpdatePackage && !shouldUpdateDomain) {
+            return
+        }
+
+        val updatedCredential = credential.copy(
+            packageName = credential.packageName ?: packageToSave,
+            serviceUrl = credential.serviceUrl ?: normalizedWebDomain
+        )
+        runCatching {
+            credentialRepository.save(updatedCredential)
+        }.onSuccess {
+            logger.d(
+                TAG,
+                "Updated credential association id=${credential.id}, package=${updatedCredential.packageName}, domain=${updatedCredential.serviceUrl}"
+            )
+        }.onFailure { throwable ->
+            logger.w(TAG, "Failed to update credential association id=${credential.id}", throwable)
+        }
+    }
+
+    private fun normalizeWebDomain(webDomain: String?): String? {
+        val trimmed = webDomain?.trim().orEmpty()
+        if (trimmed.isBlank()) {
+            return null
+        }
+        val withoutScheme = trimmed.substringAfter("://", trimmed)
+        return withoutScheme.substringBefore('/').substringBefore(':').ifBlank { null }
     }
 
     private fun getAutofillIdExtra(key: String): AutofillId? {
@@ -154,5 +228,21 @@ class AutofillAuthActivity : FragmentActivity() {
         const val EXTRA_CREDENTIAL_ID = "credentialId"
         const val EXTRA_USERNAME_AUTOFILL_ID = "usernameAutofillId"
         const val EXTRA_PASSWORD_AUTOFILL_ID = "passwordAutofillId"
+        const val EXTRA_TARGET_PACKAGE_NAME = "targetPackageName"
+        const val EXTRA_TARGET_WEB_DOMAIN = "targetWebDomain"
+        const val EXTRA_AUTH_RESULT_MODE = "authResultMode"
+
+        const val AUTH_RESULT_DATASET = "dataset"
+        const val AUTH_RESULT_FILL_RESPONSE = "fillResponse"
+
+        val CHROMIUM_BROWSER_PACKAGES = setOf(
+            "com.android.chrome",
+            "com.chrome.beta",
+            "com.chrome.dev",
+            "com.chrome.canary",
+            "com.brave.browser",
+            "com.microsoft.emmx",
+            "com.vivaldi.browser"
+        )
     }
 }

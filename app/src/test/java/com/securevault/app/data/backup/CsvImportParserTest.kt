@@ -1,5 +1,6 @@
 package com.securevault.app.data.backup
 
+import com.securevault.app.data.repository.model.CredentialType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -256,10 +257,10 @@ class CsvImportParserTest {
     }
 
     @Test
-    fun `parse SecureVault CSV keeps category default as other`() {
+    fun `parse SecureVault CSV restores category and credential type`() {
         val csv = """
-            serviceName,serviceUrl,username,password,notes,category
-            GitHub,https://github.com,user1,pass1,メモ,login
+            serviceName,serviceUrl,username,password,notes,category,credentialType
+            GitHub,https://github.com,user1,pass1,メモ,login,PASSWORD
         """.trimIndent()
 
         val result = parser.parse(csv, ImportSource.SECUREVAULT)
@@ -270,7 +271,36 @@ class CsvImportParserTest {
         assertEquals("user1", result[0].username)
         assertEquals("pass1", result[0].password)
         assertEquals("メモ", result[0].notes)
-        assertEquals("other", result[0].category)
+        assertEquals("login", result[0].category)
+        assertEquals(CredentialType.PASSWORD.name, result[0].credentialType)
+    }
+
+    @Test
+    fun `parse SecureVault CSV keeps ID only rows without password`() {
+        val csv = """
+            serviceName,serviceUrl,username,password,notes,category,credentialType
+            Example,https://example.com,user@example.com,,OTP only,other,ID_ONLY
+        """.trimIndent()
+
+        val result = parser.parse(csv, ImportSource.SECUREVAULT)
+
+        assertEquals(1, result.size)
+        assertEquals("Example", result[0].serviceName)
+        assertEquals("user@example.com", result[0].username)
+        assertNull(result[0].password)
+        assertEquals(CredentialType.ID_ONLY.name, result[0].credentialType)
+    }
+
+    @Test
+    fun `parse SecureVault CSV skips passkey rows`() {
+        val csv = """
+            serviceName,serviceUrl,username,password,notes,category,credentialType
+            Example,https://example.com,user@example.com,,passkey,other,PASSKEY
+        """.trimIndent()
+
+        val result = parser.parse(csv, ImportSource.SECUREVAULT)
+
+        assertTrue(result.isEmpty())
     }
 
     @Test

@@ -20,11 +20,16 @@ class SmartFieldDetector @Inject constructor(
     /**
      * Detects candidate fields for username, password, and OTP.
      */
-    fun detect(structure: AssistStructure): DetectedFields {
+    fun detect(
+        structure: AssistStructure,
+        focusedId: AutofillId? = null
+    ): DetectedFields {
         var usernameId: AutofillId? = null
         var passwordId: AutofillId? = null
         var otpId: AutofillId? = null
         var webDomain: String? = null
+        var focusedNodeInfo: FocusedNodeInfo? = null
+        val pageTitles = linkedSetOf<String>()
         val allAutofillIds = linkedSetOf<AutofillId>()
 
         fun traverse(node: AssistStructure.ViewNode) {
@@ -49,6 +54,21 @@ class SmartFieldDetector @Inject constructor(
                 TAG,
                 "detect node: hints=$hints, id=$idEntry, hint=${node.hint.orEmpty()}, inputType=${node.inputType}"
             )
+
+            if (focusedNodeInfo == null && node.autofillId == focusedId) {
+                focusedNodeInfo = createFocusedNodeInfo(
+                    node = node,
+                    hints = hints,
+                    idEntry = idEntry,
+                    hintText = hintText,
+                    nodeText = nodeText,
+                    htmlTokens = htmlTokens
+                )
+                logger.d(
+                    TAG,
+                    "detect: focused node id=$focusedId, supportsTrigger=${focusedNodeInfo?.supportsAutofillTrigger}, textLike=${focusedNodeInfo?.isTextInputLike}, hints=$hints, htmlTokens=$htmlTokens"
+                )
+            }
 
             if (usernameId == null && isUsernameField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
                 usernameId = node.autofillId
@@ -80,19 +100,24 @@ class SmartFieldDetector @Inject constructor(
         }
 
         for (windowIndex in 0 until structure.windowNodeCount) {
-            traverse(structure.getWindowNodeAt(windowIndex).rootViewNode)
+            val windowNode = structure.getWindowNodeAt(windowIndex)
+            windowNode.title?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { pageTitles += it }
+            traverse(windowNode.rootViewNode)
         }
 
         logger.d(
             TAG,
-            "detect result: username=$usernameId, password=$passwordId, otp=$otpId, domain=$webDomain, totalIds=${allAutofillIds.size}"
+            "detect result: focused=$focusedId, username=$usernameId, password=$passwordId, otp=$otpId, domain=$webDomain, pageTitles=${pageTitles.joinToString(limit = 2)}, totalIds=${allAutofillIds.size}"
         )
 
         return DetectedFields(
+            focusedId = focusedId,
+            focusedNodeInfo = focusedNodeInfo,
             usernameId = usernameId,
             passwordId = passwordId,
             otpId = otpId,
             webDomain = webDomain,
+            pageTitle = pageTitles.firstOrNull(),
             allAutofillIds = allAutofillIds.toList()
         )
     }
@@ -105,6 +130,7 @@ class SmartFieldDetector @Inject constructor(
         nodeText: String,
         htmlTokens: List<String>
     ): Boolean {
+        val textInputLike = isTextInputLike(node, hints, htmlTokens)
         val allTokens = buildList {
             addAll(hints)
             add(idEntry)
@@ -122,6 +148,10 @@ class SmartFieldDetector @Inject constructor(
 
         if (officialHint) {
             return true
+        }
+
+        if (!textInputLike) {
+            return false
         }
 
         val keywordMatched = allTokens.any { token ->
@@ -144,6 +174,7 @@ class SmartFieldDetector @Inject constructor(
         nodeText: String,
         htmlTokens: List<String>
     ): Boolean {
+        val textInputLike = isTextInputLike(node, hints, htmlTokens)
         val allTokens = buildList {
             addAll(hints)
             add(idEntry)
@@ -160,6 +191,10 @@ class SmartFieldDetector @Inject constructor(
 
         if (officialHint) {
             return true
+        }
+
+        if (!textInputLike) {
+            return false
         }
 
         val keywordMatched = allTokens.any { token ->
@@ -184,6 +219,7 @@ class SmartFieldDetector @Inject constructor(
         nodeText: String,
         htmlTokens: List<String>
     ): Boolean {
+        val textInputLike = isTextInputLike(node, hints, htmlTokens)
         val allTokens = buildList {
             addAll(hints)
             add(idEntry)
@@ -200,6 +236,10 @@ class SmartFieldDetector @Inject constructor(
             OTP_KEYWORDS.any { keyword -> token.contains(keyword) }
         }
 
+        if (!textInputLike) {
+            return false
+        }
+
         if (hintMatched || keywordMatched) {
             return true
         }
@@ -207,6 +247,78 @@ class SmartFieldDetector @Inject constructor(
         val inputClass = node.inputType and InputType.TYPE_MASK_CLASS
         val maxLength = node.maxTextLength
         return inputClass == InputType.TYPE_CLASS_NUMBER && maxLength in OTP_MIN_LENGTH..OTP_MAX_LENGTH
+    }
+
+    private fun isTextInputLike(
+        node: AssistStructure.ViewNode,
+        hints: List<String>,
+        htmlTokens: List<String>
+    ): Boolean {
+        val inputClass = node.inputType and InputType.TYPE_MASK_CLASS
+        if (inputClass == InputType.TYPE_CLASS_TEXT || inputClass == InputType.TYPE_CLASS_NUMBER) {
+            return true
+        }
+
+        if (hints.isNotEmpty()) {
+            return true
+        }
+
+        val htmlJoined = htmlTokens.joinToString(separator = " ")
+        val nodeJoined = buildString {
+            append(node.idEntry?.lowercase(Locale.ROOT).orEmpty())
+            append(' ')
+            append(node.hint?.toString()?.lowercase(Locale.ROOT).orEmpty())
+            append(' ')
+            append(node.text?.toString()?.lowercase(Locale.ROOT).orEmpty())
+        }
+        if (
+            htmlJoined.contains("radio") ||
+            htmlJoined.contains("checkbox") ||
+            htmlJoined.contains("button") ||
+            htmlJoined.contains("submit") ||
+            htmlJoined.contains("select") ||
+            nodeJoined.contains("radio") ||
+            nodeJoined.contains("checkbox") ||
+            nodeJoined.contains("button") ||
+            nodeJoined.contains("submit") ||
+            nodeJoined.contains("toggle")
+        ) {
+            return false
+        }
+
+        return htmlJoined.contains("input") ||
+            htmlJoined.contains("textarea") ||
+            htmlJoined.contains("text") ||
+            htmlJoined.contains("email") ||
+            htmlJoined.contains("password") ||
+            htmlJoined.contains("username") ||
+            htmlJoined.contains("tel") ||
+            htmlJoined.contains("number") ||
+            htmlJoined.contains("search")
+    }
+
+    private fun createFocusedNodeInfo(
+        node: AssistStructure.ViewNode,
+        hints: List<String>,
+        idEntry: String,
+        hintText: String,
+        nodeText: String,
+        htmlTokens: List<String>
+    ): FocusedNodeInfo {
+        val textInputLike = isTextInputLike(node, hints, htmlTokens)
+        val usernameCandidate = isUsernameField(node, hints, idEntry, hintText, nodeText, htmlTokens)
+        val passwordCandidate = isPasswordField(node, hints, idEntry, hintText, nodeText, htmlTokens)
+        val otpCandidate = isOtpField(node, hints, idEntry, hintText, nodeText, htmlTokens)
+
+        return FocusedNodeInfo(
+            inputType = node.inputType,
+            hints = hints,
+            idEntry = idEntry,
+            hintText = hintText,
+            htmlTokens = htmlTokens,
+            isTextInputLike = textInputLike,
+            supportsAutofillTrigger = textInputLike || usernameCandidate || passwordCandidate || otpCandidate
+        )
     }
 
     private fun readHtmlTokens(node: AssistStructure.ViewNode): List<String> {
@@ -227,11 +339,24 @@ class SmartFieldDetector @Inject constructor(
      * Result of the smart field detection pass.
      */
     data class DetectedFields(
+        val focusedId: AutofillId?,
+        val focusedNodeInfo: FocusedNodeInfo?,
         val usernameId: AutofillId?,
         val passwordId: AutofillId?,
         val otpId: AutofillId?,
         val webDomain: String?,
+        val pageTitle: String?,
         val allAutofillIds: List<AutofillId>
+    )
+
+    data class FocusedNodeInfo(
+        val inputType: Int,
+        val hints: List<String>,
+        val idEntry: String,
+        val hintText: String,
+        val htmlTokens: List<String>,
+        val isTextInputLike: Boolean,
+        val supportsAutofillTrigger: Boolean
     )
 
     private companion object {
@@ -246,7 +371,19 @@ class SmartFieldDetector @Inject constructor(
             "mail",
             "email",
             "account",
-            "userid"
+            "userid",
+            "loginid",
+            "memberid",
+            "customerid",
+            "ユーザー",
+            "ユーザー名",
+            "ログイン",
+            "ログインid",
+            "メール",
+            "メールアドレス",
+            "アカウント",
+            "会員番号",
+            "会員id"
         )
 
         val PASSWORD_KEYWORDS = listOf(
@@ -254,17 +391,34 @@ class SmartFieldDetector @Inject constructor(
             "password",
             "pwd",
             "pin",
-            "secret"
+            "secret",
+            "パスワード",
+            "暗証番号",
+            "パスコード",
+            "認証情報"
         )
 
-        val OTP_HINT_TOKENS = listOf("smsotpcode", "otp", "verification", "code")
+        val OTP_HINT_TOKENS = listOf(
+            "smsotpcode",
+            "otp",
+            "verification",
+            "code",
+            "認証コード",
+            "確認コード",
+            "ワンタイム"
+        )
 
         val OTP_KEYWORDS = listOf(
             "otp",
             "code",
             "token",
             "verify",
-            "verification"
+            "verification",
+            "認証コード",
+            "確認コード",
+            "ワンタイム",
+            "二段階",
+            "確認番号"
         )
     }
 }

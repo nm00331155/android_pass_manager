@@ -1,6 +1,8 @@
 package com.securevault.app.data.backup
 
 import com.securevault.app.data.repository.model.Credential
+import com.securevault.app.data.repository.model.CredentialType
+import com.securevault.app.data.repository.model.PasskeyData
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -51,6 +53,7 @@ class BackupManagerTest {
         assertTrue(backup.isFavorite)
         assertEquals(1700000000000L, backup.createdAt)
         assertEquals(1700001000000L, backup.updatedAt)
+        assertEquals(CredentialType.PASSWORD.name, backup.credentialType)
         assertFalse(serializedBackup.contains("\"id\""))
         assertFalse(serializedBackup.contains("packageName"))
     }
@@ -84,6 +87,7 @@ class BackupManagerTest {
         assertFalse(credential.isFavorite)
         assertEquals(1600000000000L, credential.createdAt)
         assertEquals(1600001000000L, credential.updatedAt)
+        assertEquals(CredentialType.PASSWORD, credential.credentialType)
         assertNull(credential.packageName)
     }
 
@@ -118,7 +122,55 @@ class BackupManagerTest {
         assertEquals(original.isFavorite, roundTripped.isFavorite)
         assertEquals(original.createdAt, roundTripped.createdAt)
         assertEquals(original.updatedAt, roundTripped.updatedAt)
+        assertEquals(CredentialType.PASSWORD, roundTripped.credentialType)
         assertNull(roundTripped.packageName)
+    }
+
+    @Test
+    fun `ID only backup roundtrip preserves null password`() {
+        val original = Credential(
+            serviceName = "Example",
+            serviceUrl = "https://example.com",
+            username = "user@example.com",
+            password = null,
+            notes = "OTP login",
+            category = "other",
+            credentialType = CredentialType.ID_ONLY
+        )
+
+        val roundTripped = original.toBackup().toCredential()
+
+        assertNull(roundTripped.password)
+        assertEquals(CredentialType.ID_ONLY, roundTripped.credentialType)
+    }
+
+    @Test
+    fun `passkey backup roundtrip preserves passkey data`() {
+        val passkeyData = PasskeyData(
+            credentialId = "credential-id",
+            publicKey = "public-key",
+            privateKey = "private-key",
+            userHandle = "user-handle",
+            rpId = "example.com",
+            origin = "https://example.com",
+            signCount = 3,
+            userDisplayName = "Example User"
+        )
+        val original = Credential(
+            serviceName = "Example",
+            serviceUrl = "example.com",
+            username = "user@example.com",
+            passkeyData = passkeyData,
+            credentialType = CredentialType.PASSKEY
+        )
+
+        val backup = original.toBackup()
+        val restored = backup.toCredential()
+
+        assertEquals(CredentialType.PASSKEY.name, backup.credentialType)
+        assertEquals(passkeyData, restored.passkeyData)
+        assertEquals(CredentialType.PASSKEY, restored.credentialType)
+        assertNull(restored.password)
     }
 
     /**

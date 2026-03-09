@@ -128,7 +128,9 @@ enum class ImportSource(
             serviceUrl = "serviceUrl",
             username = "username",
             password = "password",
-            notes = "notes"
+            notes = "notes",
+            category = "category",
+            credentialType = "credentialType"
         )
     )
 }
@@ -141,5 +143,7 @@ data class CsvColumnMapping(
     val serviceUrl: String?,
     val username: String,
     val password: String,
-    val notes: String?
+    val notes: String?,
+    val category: String? = null,
+    val credentialType: String? = null
 )

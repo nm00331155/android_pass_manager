@@ -1,11 +1,11 @@
 package com.securevault.app.ui.screen.settings
 
 import android.content.Context
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.securevault.app.data.repository.CredentialRepository
+import com.securevault.app.data.store.SecuritySettingsPreferences
 import com.securevault.app.data.store.securitySettingsDataStore
 import com.securevault.app.util.AutoLockManager
 import com.securevault.app.util.AppLogger
@@ -42,13 +42,13 @@ class SettingsViewModel @Inject constructor(
     val clipboardClearTimeoutSeconds: StateFlow<Int> =
         clipboardSettingsManager.clipboardClearTimeoutSeconds
 
-    private val _otpSmsEnabled = MutableStateFlow(DEFAULT_OTP_SMS_ENABLED)
+    private val _otpSmsEnabled = MutableStateFlow(SecuritySettingsPreferences.DEFAULT_OTP_SMS_ENABLED)
     val otpSmsEnabled: StateFlow<Boolean> = _otpSmsEnabled.asStateFlow()
 
-    private val _otpNotificationEnabled = MutableStateFlow(DEFAULT_OTP_NOTIFICATION_ENABLED)
+    private val _otpNotificationEnabled = MutableStateFlow(SecuritySettingsPreferences.DEFAULT_OTP_NOTIFICATION_ENABLED)
     val otpNotificationEnabled: StateFlow<Boolean> = _otpNotificationEnabled.asStateFlow()
 
-    private val _otpClipboardEnabled = MutableStateFlow(DEFAULT_OTP_CLIPBOARD_ENABLED)
+    private val _otpClipboardEnabled = MutableStateFlow(SecuritySettingsPreferences.DEFAULT_OTP_CLIPBOARD_ENABLED)
     val otpClipboardEnabled: StateFlow<Boolean> = _otpClipboardEnabled.asStateFlow()
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 2)
@@ -82,7 +82,7 @@ class SettingsViewModel @Inject constructor(
     fun updateOtpSmsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             appContext.securitySettingsDataStore.edit { settings ->
-                settings[OTP_SMS_ENABLED_KEY] = enabled
+                settings[SecuritySettingsPreferences.OTP_SMS_ENABLED_KEY] = enabled
             }
         }
     }
@@ -93,7 +93,7 @@ class SettingsViewModel @Inject constructor(
     fun updateOtpNotificationEnabled(enabled: Boolean) {
         viewModelScope.launch {
             appContext.securitySettingsDataStore.edit { settings ->
-                settings[OTP_NOTIFICATION_ENABLED_KEY] = enabled
+                settings[SecuritySettingsPreferences.OTP_NOTIFICATION_ENABLED_KEY] = enabled
             }
         }
     }
@@ -104,7 +104,7 @@ class SettingsViewModel @Inject constructor(
     fun updateOtpClipboardEnabled(enabled: Boolean) {
         viewModelScope.launch {
             appContext.securitySettingsDataStore.edit { settings ->
-                settings[OTP_CLIPBOARD_ENABLED_KEY] = enabled
+                settings[SecuritySettingsPreferences.OTP_CLIPBOARD_ENABLED_KEY] = enabled
             }
         }
     }
@@ -132,7 +132,11 @@ class SettingsViewModel @Inject constructor(
     private fun observeOtpSettings() {
         viewModelScope.launch {
             appContext.securitySettingsDataStore.data
-                .map { settings -> settings[OTP_SMS_ENABLED_KEY] ?: DEFAULT_OTP_SMS_ENABLED }
+                .map {
+                    settings ->
+                    settings[SecuritySettingsPreferences.OTP_SMS_ENABLED_KEY]
+                        ?: SecuritySettingsPreferences.DEFAULT_OTP_SMS_ENABLED
+                }
                 .distinctUntilChanged()
                 .collect { enabled ->
                     _otpSmsEnabled.value = enabled
@@ -143,7 +147,8 @@ class SettingsViewModel @Inject constructor(
             appContext.securitySettingsDataStore.data
                 .map {
                     settings ->
-                    settings[OTP_NOTIFICATION_ENABLED_KEY] ?: DEFAULT_OTP_NOTIFICATION_ENABLED
+                    settings[SecuritySettingsPreferences.OTP_NOTIFICATION_ENABLED_KEY]
+                        ?: SecuritySettingsPreferences.DEFAULT_OTP_NOTIFICATION_ENABLED
                 }
                 .distinctUntilChanged()
                 .collect { enabled ->
@@ -153,21 +158,15 @@ class SettingsViewModel @Inject constructor(
 
         viewModelScope.launch {
             appContext.securitySettingsDataStore.data
-                .map { settings -> settings[OTP_CLIPBOARD_ENABLED_KEY] ?: DEFAULT_OTP_CLIPBOARD_ENABLED }
+                .map {
+                    settings ->
+                    settings[SecuritySettingsPreferences.OTP_CLIPBOARD_ENABLED_KEY]
+                        ?: SecuritySettingsPreferences.DEFAULT_OTP_CLIPBOARD_ENABLED
+                }
                 .distinctUntilChanged()
                 .collect { enabled ->
                     _otpClipboardEnabled.value = enabled
                 }
         }
-    }
-
-    private companion object {
-        const val DEFAULT_OTP_SMS_ENABLED = true
-        const val DEFAULT_OTP_NOTIFICATION_ENABLED = false
-        const val DEFAULT_OTP_CLIPBOARD_ENABLED = true
-
-        val OTP_SMS_ENABLED_KEY = booleanPreferencesKey("otp_sms_enabled")
-        val OTP_NOTIFICATION_ENABLED_KEY = booleanPreferencesKey("otp_notification_enabled")
-        val OTP_CLIPBOARD_ENABLED_KEY = booleanPreferencesKey("otp_clipboard_enabled")
     }
 }

@@ -3,14 +3,15 @@
     android:settingsActivity="com.securevault.app.ui.MainActivity">
 
         <!--
-            Chromium 137+ は compatibility-mode を廃止し、ネイティブ Android Autofill を使用する。
-            maxLongVersionCode を 136 系の最終バージョンに制限する（Google 公式推奨値）。
-            137 以降のユーザーはブラウザ設定で「別のサービスを使用して自動入力」を有効にする必要がある。
+            Chromium 系ブラウザは端末・ビルド差で互換モード経路が変わる。
+            Chrome 145 系端末で framework から compat package を無視されていたため、
+            まずは上限値を広げて Autofill request 自体が来るかを検証する。
+            ブラウザ側の「別のサービスを使用して自動入力」設定が必要なケースは継続して案内する。
         -->
-        <compatibility-package android:name="com.android.chrome" android:maxLongVersionCode="711900039" />
-        <compatibility-package android:name="com.chrome.beta" android:maxLongVersionCode="711900039" />
-        <compatibility-package android:name="com.chrome.dev" android:maxLongVersionCode="711900039" />
-        <compatibility-package android:name="com.chrome.canary" android:maxLongVersionCode="711900039" />
+        <compatibility-package android:name="com.android.chrome" android:maxLongVersionCode="999999999" />
+        <compatibility-package android:name="com.chrome.beta" android:maxLongVersionCode="999999999" />
+        <compatibility-package android:name="com.chrome.dev" android:maxLongVersionCode="999999999" />
+        <compatibility-package android:name="com.chrome.canary" android:maxLongVersionCode="999999999" />
         <compatibility-package android:name="com.brave.browser" android:maxLongVersionCode="711900039" />
         <compatibility-package android:name="com.microsoft.emmx" android:maxLongVersionCode="711900039" />
         <compatibility-package android:name="org.mozilla.firefox" android:maxLongVersionCode="999999999" />

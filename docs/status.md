@@ -1,6 +1,6 @@
 # 作業状況
 
-最終更新: 2026-03-08 20:00:28 +09:00
+最終更新: 2026-03-09 14:48:51 +09:00
 
 ## 現在のフェーズ
 - Phase 1〜6: 全完了
@@ -27,6 +27,111 @@
 - `play-services-auth` 依存あり（SMS OTP 用）だが INTERNET 権限は Manifest で明示除去
 
 ## 本セッションで完了した作業
+- ID-only / passwordless / passkey / Credential Provider 対応を実装してビルド可能状態まで統合
+  - 改修: `Credential` の nullable password / `credentialType` / `passkeyData` に合わせて Add/Edit, Home, Detail の UI を更新し、`serviceName + username` 必須、password 任意の扱いへ変更
+  - 改修: `SecureVaultAutofillService.kt`, `AutofillAuthActivity.kt` を更新し、ID-only credential の候補化、passkey の通常 Autofill 候補除外、save 時の `username required / password optional`、password 非保持 credential の安全な入力を追加
+  - 改修: `PasskeyWebAuthnHelper.kt`, `KeyPassCredentialProviderService.kt`, `CredentialProviderAuthActivity.kt`, `PrivilegedBrowserAllowlist.kt`, `provider.xml` を追加・更新し、password/passkey の get/create provider flow と WebAuthn software authenticator 応答生成を実装
+  - 改修: `SmsOtpActivity.kt` を `ComponentActivity` 化し Hilt/KSP ビルドエラーを解消
+  - 改修: `app/build.gradle.kts` に `testImplementation("org.json:json:20240303")` を追加し、passkey helper の JVM unit test 実行を安定化
+  - テスト: `CsvImportParserTest.kt`, `BackupManagerTest.kt` を更新し、`PasskeyWebAuthnHelperTest.kt` を追加
+  - 検証: `./gradlew.bat clean testDebugUnitTest assembleDebug` 成功
+  - 生成物: `app/schemas/com.securevault.app.data.db.SecureVaultDatabase/2.json` を生成（`LastWriteTime=2026-03-09 14:40:36`、`Length=5430`）
+  - 成果物: ルート APK `android_pass_manager-debug.apk` を更新（`LastWriteTime=2026-03-09 14:47:05`、`Length=95646061`）
+  - 実機反映: `adb -s RFCY2094T0V install -r android_pass_manager-debug.apk` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-09 14:47:57`
+  - スクリーンショット: `docs/screenshots/securevault_passkey_status_20260309.png` を取得（`LastWriteTime=2026-03-09 14:48:39`、`Length=85647`）
+  - 注意: 取得したスクリーンショットは起動直後画面の保存まで確認。生体認証通過後の個別画面の目視確認は別途手動 QA が必要
+
+- Brave で再び候補が出なくなった問題を compat-mode proxy `focusedId` の扱いとして追加修正
+  - 調査結果: 最新ログでは Brave から `FillRequest` 自体は来ており、`SmartFieldDetector` も `usernameId` / `passwordId` と `webDomain` を検出していた一方、compat-mode の `focusedId` は `AssistStructure` 内に materialize されず `focusedNodeInfo=null` のため、`SecureVaultAutofillService.kt` の新しい guard が `buildFillResponse: skipping because focusedId is not a credential-like input` 側に倒れる構造になっていた
+  - 改修: `SecureVaultAutofillService.kt` に `shouldAllowFocusedTrigger()` を追加し、`focusedId` が `allAutofillIds` に存在しない compat proxy だが credential targets 自体は検出できている場合は trigger を許可するよう変更
+  - 期待効果: Brave / Chromium compat-mode では hidden username/password ids と別の proxy focusedId でも、候補UIを再度表示できる
+
+- Chrome の単一 credential 認証後にもう一度候補を選ばないと入力されない UX を改善するため、response-auth の返却 dataset を簡素化
+  - 調査結果: Android Autofill の response-level authentication は認証結果として `FillResponse` を返す仕様で、公式ドキュメントも「認証後に populated dataset を含む `FillResponse` を返す」流れになっており、端末実装によっては認証後に unlocked candidate が再表示されうる
+  - 改修: `AutofillAuthActivity.kt` で `AUTH_RESULT_FILL_RESPONSE` の場合は presentation 付き `Dataset.Builder(RemoteViews)` ではなく `Dataset.Builder()` を使って実データのみを返すよう変更
+  - 狙い: 単一 credential の response-auth で、認証後に二度目の候補選択UIを出さずそのまま autofill へ進める余地を広げる
+  - 注意: これは framework / browser 実装依存の挙動も絡むため、実機で再確認が必要
+
+- 検証と配備を更新
+  - `:app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `android_pass_manager-debug.apk` を更新（`LastWriteTime=2026-03-09 13:03:44`、`Length=96588297`）
+  - 実機反映: `adb install -r` 成功、端末 `RFCY2094T0V` に反映済み（`lastUpdateTime=2026-03-09 13:03:54`）
+  - ログ準備: `autofill_test_log.txt` を `SecureVaultAutofill` / `SmartFieldDetector` / `AutofillAuthActivity` タグ込みで再取得開始
+
+- ログイン無関係な radio/button 操作でパスワード認証UIが出る誤発火を抑止し、サイト個別調整ではなく汎用 heuristic を強化
+  - 調査結果: `SmartFieldDetector` が broad keyword と focused proxy id の扱いで過剰反応しており、`USERNAME_KEYWORDS` の bare `"id"` と、focused node を無条件に UI trigger に追加する処理が、申請フォーム等の非ログイン操作でも候補UIを開く要因になっていた
+  - 改修: `SmartFieldDetector.kt` で username/password/OTP 判定に「実際に text input らしい node」であることを必須化し、`radio` / `checkbox` / `button` / `submit` / `select` / `toggle` 系 control を HTML 属性だけでなく `idEntry` / hint / text からも除外するよう変更
+  - 改修: `SmartFieldDetector.kt` の username keyword から bare `"id"` を削除し、`loginid` / `memberid` / `customerid` / `ログインid` / `会員id` へ置き換え
+  - 改修: focused node の `supportsAutofillTrigger` を検出結果に保持し、`SecureVaultAutofillService.kt` では credential-like な focused node でない限り `focusedId` を dataset trigger に使わず、mismatch 時は `FillResponse` 自体を返さないよう変更
+  - テスト: `SmartFieldDetectorTest.kt` を追加し、`customer_id` のような非入力 node を username と誤検出しないこと、radio input が trigger にならないこと、`login_id` text input は引き続き検出・trigger 対象になることを固定
+  - 検証: `:app:testDebugUnitTest :app:assembleDebug` 成功、ユニットテスト 63 件成功
+  - 成果物: ルート APK `android_pass_manager-debug.apk` を更新（`LastWriteTime=2026-03-09 12:39:50`、`Length=96588297`）
+  - 実機反映: `adb install -r` 成功、端末 `RFCY2094T0V` に反映済み（`lastUpdateTime=2026-03-09 12:40:07`）
+  - スクリーンショット: 未取得（今回の変更は検出・表示条件のロジック調整であり、実機再現確認待ち）
+
+- Brave で UI は出るが認証後に入力されずループする問題を追加修正
+  - 調査結果: verbose logcat で `DialogFillUi` は表示されている一方、認証成功後 `onAuthenticationResult()` のたびに同じ focused proxy id (`4:i8135`) へ新しい `FillRequest` が発行され、`response-level authentication` が再度返されるループを確認
+  - 原因: Chromium compat-mode の proxy field では、認証結果として `FillResponse` を返す方式だと framework が hidden の fillable ids (`4:i524288`, `4:i524289`) を持ったまま focused proxy id を未入力とみなし、再度同じ認証 UI を出していた
+  - 改修: `SecureVaultAutofillService.kt` の `shouldUseResponseAuthentication()` を変更し、`focusedId` が検出した username/password id と一致しない場合は `response-level authentication` を使わず dataset authentication 経路に戻すよう修正
+  - 期待効果: Brave など compat-mode browser では 1 度の認証で dataset 選択完了まで進み、同じ認証 UI の再表示ループを止める
+
+- Chrome 145 で SecureVault に FillRequest 自体が来ない問題に対する compat 設定実験を追加
+  - 調査結果: logcat で `Ignoring not allowed compat package com.android.chrome` を確認し、実機 Chrome の `versionCode=763215933` が `autofill_service_config.xml` の上限 `711900039` を超えて framework から除外されていた
+  - 改修: `autofill_service_config.xml` の `com.android.chrome` / `com.chrome.beta` / `com.chrome.dev` / `com.chrome.canary` の `maxLongVersionCode` を `999999999` へ一時的に拡張
+  - 目的: Chrome 側で SecureVault への FillRequest が届くかを検証し、ブラウザ設定不足なのか manifest compat 制限なのかを切り分ける
+
+- Brave / Chromium 互換モードで Autofill UI が出ないアプリ側根本原因を特定して修正
+  - 調査結果: verbose logcat で、framework の `focusedId` と `SmartFieldDetector` が返していた `usernameId` / `passwordId` が一致していないことを確認
+  - 症状: `SecureVaultAutofillService` は正常に `FillResponse` を返していたが、応答対象 ID が現在フォーカス中の view を含まないため候補 UI 表示条件を満たさず、さらに hidden 側 ID で作成した `SaveInfo` により session が即 `finishSessionLocked(): ACTIVE` で終了していた
+  - 改修: `SmartFieldDetector.detect()` に request の `focusedId` を渡し、検出結果へ保持するよう変更
+  - 改修: `SecureVaultAutofillService.kt` で response-level authentication / dataset authentication / fill dialog trigger に `focusedId` も含めるよう変更し、UI 表示用 trigger ID と実際の入力対象 ID を分離
+  - 改修: `focusedId` が検出した username/password ID に含まれないケースでは `SaveInfo` を付与しないよう変更し、互換モード browser で hidden ID 追跡により session が即終了する不具合を回避
+  - 検証: `:app:assembleDebug`, `:app:testDebugUnitTest` 成功、`get_errors` で変更ファイルのエラー 0 件
+  - 成果物: ルート APK `android_pass_manager-debug.apk` を更新（`LastWriteTime=2026-03-09 10:57:41`、`Length=96588297`）
+  - 実機反映: `adb install -r` 成功、端末 `RFCY2094T0V` に反映済み
+  - 端末設定: `autofill_service` を SecureVault に再設定済み
+  - 実験設定: 次回の切り分け用に `default-augmented-service-enabled=false`, `max_visible_datasets=4` を維持
+  - スクリーンショット: 未取得（修正版の UI 再確認待ち）
+
+- Android 14+ Fill Dialog を使う Autofill 表示経路を追加
+  - 調査結果: 実機 `dumpsys autofill` で `Inline Suggestions Enabled: false` かつ `Max visible datasets: 0` を確認し、通常の候補ドロップダウンだけでは UI が出ない端末状態と判断
+  - 改修: `SecureVaultAutofillService.kt` の Dataset 生成を Android 14+ では `Presentations.Builder` ベースへ切替え、menu presentation に加えて dialog presentation も返すよう変更
+  - 改修: `FillResponse.Builder.setDialogHeader()` / `setFillDialogTriggerIds()` / `setShowFillDialogIcon(true)` を追加し、ユーザー名・パスワード・OTP フィールドのフォーカス時に Fill Dialog が起動できるよう調整
+  - 維持: 既存の `AutofillAuthActivity` 経由の認証ゲートはそのまま維持し、候補選択後に生体認証して入力するフローは継続
+  - 検証: `:app:assembleDebug :app:testDebugUnitTest` 成功
+  - 成果物: ルート APK `android_pass_manager-debug.apk` を更新（`LastWriteTime=2026-03-09 10:02:27`）
+  - 実機反映: `adb install -r` 成功、`lastUpdateTime=2026-03-09 10:02:53`
+  - 端末設定: `autofill_service` を `com.securevault.app/com.securevault.app.service.autofill.SecureVaultAutofillService` に再設定済み
+  - ログ準備: `autofill_test_log.txt` の再取得を開始済み
+  - スクリーンショット: 未取得（Fill Dialog の実表示確認待ち）
+
+- Autofill を「一覧表示」から「高信頼一致 + 認証付き入力」へ再調整
+  - 改修: `SecureVaultAutofillService.kt` の認証なし直接入力 Dataset を廃止し、`AutofillAuthActivity` を経由する認証ゲート付き Dataset に復帰
+  - 改修: `AutofillCredentialMatcher.kt` を高信頼一致専用へ変更し、汎用フォールバック一覧を廃止
+  - 改修: アプリ表示名も照合対象に追加し、`com.netflix.mediaclient` のような package 名と `Netflix` の保存名を結び付けやすくした
+  - 改修: ブラウザ要求で `webDomain` が取得できない場合は `AssistStructure.WindowNode.title` も照合に使い、それでも特定できない場合のみ候補を返さないよう変更
+  - 改修: 認証成功時に未保存の `packageName` / `serviceUrl` を学習保存し、次回以降の一致精度を改善
+  - テスト: `AutofillCredentialMatcherTest.kt` を高信頼一致仕様に更新し、`assembleDebug`, `testDebugUnitTest` とも成功
+  - 成果物: ルート APK `android_pass_manager-debug.apk` を更新（`LastWriteTime=2026-03-09 09:31:52`）
+  - 実機反映: `adb install -r` 成功、`lastUpdateTime=2026-03-09 09:32:09`
+  - 端末設定: `autofill_service` は `com.securevault.app/com.securevault.app.service.autofill.SecureVaultAutofillService` のまま維持を確認
+  - スクリーンショット: `docs/screenshots/securevault_autofill_targeted_20260309.png` を取得
+
+- 自動入力候補が表示されない根本原因を修正
+  - 調査結果: 端末側では SecureVault の Autofill Service は有効だったが、`dumpsys autofill` 上で `mResponses: null` となっており、保存済み資格情報の照合失敗で候補 0 件になりやすい状態を確認
+  - 改修: `AutofillCredentialMatcher.kt` を追加し、`packageName` / URL / ドメイン / サービス名断片を使った優先順位付き照合へ変更
+  - 改修: `SecureVaultAutofillService.kt` の `resolveCredentials()` に完全一致失敗時のフォールバック候補返却を追加
+  - 改修: `SmartFieldDetector.kt` に日本語のログインID / メール / パスワード / OTP キーワードを追加
+  - 改修: `SettingsScreen.kt`, `strings.xml` に Chromium 系ブラウザ向け Autofill 設定案内を追加
+  - 目的: 手入力保存データで `packageName` や URL が欠落していても候補表示を成立させ、日本語UIの入力欄でも検出率を改善
+  - 検証: `./gradlew.bat --no-daemon :app:assembleDebug :app:testDebugUnitTest --console=plain` 成功
+  - エラーチェック: `get_errors` で変更対象ファイルのエラー 0 件
+  - 成果物: ルートへ `android_pass_manager-debug.apk` を出力（`LastWriteTime=2026-03-09 09:08:40`）
+  - 実機反映: 署名不一致のため既存アプリを一度アンインストール後、`adb install` で再インストール成功
+  - 端末反映: `lastUpdateTime=2026-03-09 09:10:12`
+  - 端末設定: 再インストールで Autofill 既定サービスが Google 側へ戻ったため、`settings put secure autofill_service` で SecureVault を再選択
+  - スクリーンショット: `docs/screenshots/securevault_autofill_fix_20260309.png` を取得
+
 - 指示書10対応: Autofill / Credential Provider の候補表示不具合を修正
   - 改修: `KeyPassCredentialProviderService.kt`
     - 空ユーザー名 credential をスキップするガードを追加

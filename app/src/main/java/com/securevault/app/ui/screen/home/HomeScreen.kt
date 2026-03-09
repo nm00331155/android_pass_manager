@@ -322,7 +322,10 @@ private fun CredentialListItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = credential.category,
+                text = listOf(
+                    categoryLabel(credential.category),
+                    credentialTypeLabel(credential)
+                ).joinToString(" • "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -377,4 +380,19 @@ private fun DismissBackground(modifier: Modifier = Modifier) {
     ) {
         Text(text = stringResource(R.string.home_swipe_hint))
     }
+}
+
+@Composable
+private fun credentialTypeLabel(credential: Credential): String = when {
+    credential.isPasskey -> stringResource(R.string.credential_type_passkey)
+    credential.hasPassword -> stringResource(R.string.credential_type_password)
+    else -> stringResource(R.string.credential_type_id_only)
+}
+
+@Composable
+private fun categoryLabel(category: String): String = when (category) {
+    "login" -> stringResource(R.string.category_login)
+    "finance" -> stringResource(R.string.category_finance)
+    "social" -> stringResource(R.string.category_social)
+    else -> stringResource(R.string.category_other)
 }
