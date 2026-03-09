@@ -45,7 +45,10 @@ object DatabaseModule {
             SecureVaultDatabase.DATABASE_NAME
         )
             .openHelperFactory(factory)
-            .addMigrations(DatabaseMigrations.MIGRATION_1_2)
+            .addMigrations(
+                DatabaseMigrations.MIGRATION_1_2,
+                DatabaseMigrations.MIGRATION_2_3
+            )
             .build()
     }
 

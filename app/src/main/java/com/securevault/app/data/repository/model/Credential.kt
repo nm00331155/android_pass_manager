@@ -1,12 +1,15 @@
 package com.securevault.app.data.repository.model
 
+import java.util.Locale
+
 /**
  * 認証情報の種類。
  */
 enum class CredentialType {
     PASSWORD,
     ID_ONLY,
-    PASSKEY
+    PASSKEY,
+    CARD
 }
 
 /**
@@ -24,6 +27,44 @@ data class PasskeyData(
 )
 
 /**
+ * クレジットカード固有データ。
+ */
+data class CardData(
+    val cardholderName: String? = null,
+    val cardNumber: String,
+    val expirationMonth: Int? = null,
+    val expirationYear: Int? = null,
+    val securityCode: String? = null
+) {
+    val normalizedCardNumber: String
+        get() = cardNumber.filter(Char::isDigit)
+
+    val lastFourDigits: String
+        get() = normalizedCardNumber.takeLast(4)
+
+    val maskedCardNumber: String
+        get() = when {
+            normalizedCardNumber.isBlank() -> ""
+            normalizedCardNumber.length <= 4 -> normalizedCardNumber
+            else -> "**** **** **** $lastFourDigits"
+        }
+
+    val formattedExpiration: String?
+        get() = if (expirationMonth != null && expirationYear != null) {
+            String.format(Locale.US, "%02d/%04d", expirationMonth, expirationYear)
+        } else {
+            null
+        }
+
+    val shortExpiration: String?
+        get() = if (expirationMonth != null && expirationYear != null) {
+            String.format(Locale.US, "%02d/%02d", expirationMonth, expirationYear % 100)
+        } else {
+            null
+        }
+}
+
+/**
  * UI/アプリ層で扱う平文の認証情報モデル。
  */
 data class Credential(
@@ -39,7 +80,9 @@ data class Credential(
     val updatedAt: Long = System.currentTimeMillis(),
     val isFavorite: Boolean = false,
     val passkeyData: PasskeyData? = null,
+    val cardData: CardData? = null,
     val credentialType: CredentialType = when {
+        cardData != null -> CredentialType.CARD
         passkeyData != null -> CredentialType.PASSKEY
         password.isNullOrBlank() -> CredentialType.ID_ONLY
         else -> CredentialType.PASSWORD
@@ -50,4 +93,15 @@ data class Credential(
 
     val isPasskey: Boolean
         get() = credentialType == CredentialType.PASSKEY && passkeyData != null
+
+    val isCard: Boolean
+        get() = credentialType == CredentialType.CARD && cardData != null
+
+    val listSubtitle: String
+        get() = if (isCard) {
+            cardData?.cardholderName?.takeIf { it.isNotBlank() }
+                ?: cardData?.maskedCardNumber.orEmpty()
+        } else {
+            username
+        }
 }

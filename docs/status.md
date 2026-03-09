@@ -1,6 +1,6 @@
 # 作業状況
 
-最終更新: 2026-03-09 14:48:51 +09:00
+最終更新: 2026-03-09 17:17:49 +09:00
 
 ## 現在のフェーズ
 - Phase 1〜6: 全完了
@@ -19,14 +19,44 @@
 10. 他サービスインポート（Brave, Chrome, Edge, Firefox, 1Password, Bitwarden, LastPass, Dashlane, Apple パスワード, KeePass）
 11. ダークモード（Material 3 ダイナミックカラー）
 12. オフライン完結（INTERNET 権限なし）
+13. クレジットカード管理（暗号化保存、編集、バックアップ/CSV 往復）
+14. Passwords / passkeys / autofill の provider 管理導線
 
 ## 既知の制限事項
 - Samsung Pass は独自 `.spass` 形式のため直接インポート非対応（Google パスワードマネージャー経由を推奨）
 - Android 15+ では通知からの OTP 読取に制限あり
 - ダイナミックカラーは Android 12（API 31）以上のみ
 - `play-services-auth` 依存あり（SMS OTP 用）だが INTERNET 権限は Manifest で明示除去
+- クレジットカード有効期限の Autofill はサイト実装差（`MM/YY` / `MM/YYYY` / month-year 分離）に依存するため、実サイトごとに最終 QA が必要
 
 ## 本セッションで完了した作業
+- 認証画面と Autofill UI の追加調整
+  - 改修: `AuthScreen.kt`, `AuthViewModel.kt` を更新し、起動直後の認証画面で自動的に認証ダイアログを起動するよう変更。起動ロゴで止まって見える状態を減らし、手動ボタンはリトライ用途として維持
+  - 改修: `AuthScreen.kt`, `AuthViewModel.kt`, `NavGraph.kt` を追加更新し、認証画面への再入時に前回の `AuthUiState` を初期化、`autoPromptAttempted` を saveable ではなく画面単位 state に変更、未ロック時は `Auth` に留まらず `Home` へ遷移するよう修正
+  - 改修: `ConfirmDialog.kt` を更新し、`いいえ` 側を `OutlinedButton` 化して高コントラスト化。白背景上でも視認しやすい見た目へ変更
+  - 改修: `SecureVaultAutofillService.kt` を更新し、ユーザー名/パスワードまたはカード項目が既に埋まっている場合は Autofill UI を再表示しないよう抑制
+  - 改修: `SecureVaultAutofillService.kt` の response-level authentication を password 保持 credential のみに限定し、ID-only credential は dataset suggestion 経由で表示するよう変更
+  - 調査: `adb logcat` では `AndroidRuntime` の致命例外は確認されず、`MainActivity` と splash 遷移までは到達していたため、クラッシュではなく認証待ち UX が主因と判断
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `android_pass_manager-debug.apk` を更新（`LastWriteTime=2026-03-09 17:16:22`、`Length=96767073`）
+  - 実機反映: `adb -s RFCY2094T0V install -r android_pass_manager-debug.apk` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-09 17:16:35`
+  - スクリーンショット: `docs/screenshots/securevault_auth_autoprompt_20260309.png` を取得（`LastWriteTime=2026-03-09 16:52:30`、`Length=55662`）
+  - 再起動確認: close -> relaunch の連続シーケンスで `MainActivity` 再表示と `BiometricPrompt` 再表示を logcat 上で確認し、追加スクリーンショット `docs/screenshots/securevault_auth_relaunch_20260309.png` を取得（`LastWriteTime=2026-03-09 17:17:23`、`Length=50682`）
+
+- クレジットカード自動入力と Credential Provider 一元管理導線を追加実装
+  - 改修: `Credential.kt`, `CredentialEntity.kt`, `CredentialRepositoryImpl.kt`, `DatabaseMigrations.kt`, `SecureVaultDatabase.kt`, `DatabaseModule.kt` を更新し、`CredentialType.CARD` と `CardData`、Room v3 migration、暗号化保存/復号を追加
+  - 改修: `AddEditViewModel.kt`, `AddEditScreen.kt`, `HomeScreen.kt`, `HomeViewModel.kt`, `DetailScreen.kt` を更新し、カード種別の作成/編集/検索/表示、カード番号・名義・有効期限・セキュリティコード表示を追加
+  - 改修: `SecureVaultAutofillService.kt`, `SmartFieldDetector.kt`, `AutofillAuthActivity.kt` を更新し、カード番号・名義・有効期限・セキュリティコードの検出、保存、認証後入力を追加
+  - 改修: `BackupCredential.kt`, `BackupManager.kt`, `ImportSource.kt`, `CsvImportParser.kt` を更新し、暗号化バックアップと SecureVault CSV にカード項目を追加
+  - 改修: `SettingsScreen.kt`, `strings.xml` を更新し、`android.settings.CREDENTIAL_PROVIDER` を開く導線と Samsung Pass 等の追加 provider を無効化する案内を追加
+  - テスト: `SmartFieldDetectorTest.kt`, `BackupManagerTest.kt`, `CsvImportParserTest.kt` にカード対応ケースを追加
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug` 成功、72 件の unit test 成功
+  - 生成物: `app/schemas/com.securevault.app.data.db.SecureVaultDatabase/3.json` を生成（`LastWriteTime=2026-03-09 15:59:30`、`Length=6884`）
+  - 成果物: ルート APK `android_pass_manager-debug.apk` を更新（`LastWriteTime=2026-03-09 16:02:21`、`Length=96767073`）
+  - 実機反映: `adb -s RFCY2094T0V install -r android_pass_manager-debug.apk` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-09 16:03:39`
+  - スクリーンショット: `docs/screenshots/securevault_cards_provider_20260309.png` を取得（`LastWriteTime=2026-03-09 16:11:19`、`Length=142058`）
+  - 注意: スクリーンショットは起動直後の認証画面まで。カード作成画面・設定画面・実サイト Autofill は生体認証通過後の手動 QA が別途必要
+
 - ID-only / passwordless / passkey / Credential Provider 対応を実装してビルド可能状態まで統合
   - 改修: `Credential` の nullable password / `credentialType` / `passkeyData` に合わせて Add/Edit, Home, Detail の UI を更新し、`serviceName + username` 必須、password 任意の扱いへ変更
   - 改修: `SecureVaultAutofillService.kt`, `AutofillAuthActivity.kt` を更新し、ID-only credential の候補化、passkey の通常 Autofill 候補除外、save 時の `username required / password optional`、password 非保持 credential の安全な入力を追加

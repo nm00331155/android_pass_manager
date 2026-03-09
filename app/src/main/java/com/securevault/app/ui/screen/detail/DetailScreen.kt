@@ -56,6 +56,9 @@ fun DetailScreen(
     val context = LocalContext.current
     val usernameCopiedLabel = stringResource(R.string.username_copied)
     val passwordCopiedLabel = stringResource(R.string.password_copied)
+    val cardholderNameCopiedLabel = stringResource(R.string.cardholder_name_copied)
+    val cardNumberCopiedLabel = stringResource(R.string.card_number_copied)
+    val cardSecurityCodeCopiedLabel = stringResource(R.string.card_security_code_copied)
     val credential by viewModel.credential.collectAsStateWithLifecycle()
     val passwordVisible by viewModel.passwordVisible.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -129,18 +132,95 @@ fun DetailScreen(
                 }
             )
 
-            DetailRow(
-                title = stringResource(R.string.field_username),
-                value = currentCredential.username,
-                actionLabel = stringResource(R.string.copy_action),
-                onAction = {
-                    viewModel.copyToClipboard(
-                        context = context,
-                        text = currentCredential.username,
-                        label = usernameCopiedLabel
+            if (!currentCredential.isCard) {
+                DetailRow(
+                    title = stringResource(R.string.field_username),
+                    value = currentCredential.username,
+                    actionLabel = stringResource(R.string.copy_action),
+                    onAction = {
+                        viewModel.copyToClipboard(
+                            context = context,
+                            text = currentCredential.username,
+                            label = usernameCopiedLabel
+                        )
+                    }
+                )
+            }
+
+            if (currentCredential.isCard) {
+                val cardData = currentCredential.cardData
+                cardData?.cardholderName?.takeIf { it.isNotBlank() }?.let { cardholderName ->
+                    DetailRow(
+                        title = stringResource(R.string.field_cardholder_name),
+                        value = cardholderName,
+                        actionLabel = stringResource(R.string.copy_action),
+                        onAction = {
+                            viewModel.copyToClipboard(
+                                context = context,
+                                text = cardholderName,
+                                label = cardholderNameCopiedLabel
+                            )
+                        }
                     )
                 }
-            )
+
+                cardData?.let {
+                    DetailRow(
+                        title = stringResource(R.string.field_card_number_required),
+                        value = if (passwordVisible) {
+                            it.normalizedCardNumber
+                        } else {
+                            it.maskedCardNumber
+                        },
+                        actionLabel = if (passwordVisible) {
+                            stringResource(R.string.hide_password)
+                        } else {
+                            stringResource(R.string.show_password)
+                        },
+                        secondaryActionLabel = stringResource(R.string.copy_action),
+                        onAction = viewModel::togglePasswordVisibility,
+                        onSecondaryAction = {
+                            viewModel.copyToClipboard(
+                                context = context,
+                                text = it.normalizedCardNumber,
+                                label = cardNumberCopiedLabel
+                            )
+                        }
+                    )
+
+                    it.formattedExpiration?.let { expiration ->
+                        DetailRow(
+                            title = stringResource(R.string.field_card_expiration),
+                            value = expiration
+                        )
+                    }
+
+                    it.securityCode?.takeIf { securityCode -> securityCode.isNotBlank() }?.let { securityCode ->
+                        DetailRow(
+                            title = stringResource(R.string.field_card_security_code),
+                            value = if (passwordVisible) {
+                                securityCode
+                            } else {
+                                "*".repeat(max(3, securityCode.length))
+                            },
+                            actionLabel = if (passwordVisible) {
+                                stringResource(R.string.hide_password)
+                            } else {
+                                stringResource(R.string.show_password)
+                            },
+                            secondaryActionLabel = stringResource(R.string.copy_action),
+                            onAction = viewModel::togglePasswordVisibility,
+                            onSecondaryAction = {
+                                viewModel.copyToClipboard(
+                                    context = context,
+                                    text = securityCode,
+                                    label = cardSecurityCodeCopiedLabel
+                                )
+                            }
+                        )
+                    }
+                }
+            }
 
             DetailRow(
                 title = stringResource(R.string.field_credential_type),
@@ -274,6 +354,7 @@ private fun formatDate(timestamp: Long): String {
 
 @Composable
 private fun credentialTypeLabel(credential: Credential): String = when {
+    credential.isCard -> stringResource(R.string.credential_type_card)
     credential.isPasskey -> stringResource(R.string.credential_type_passkey)
     credential.hasPassword -> stringResource(R.string.credential_type_password)
     else -> stringResource(R.string.credential_type_id_only)

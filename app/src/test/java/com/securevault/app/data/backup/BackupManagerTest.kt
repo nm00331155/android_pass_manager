@@ -1,5 +1,6 @@
 package com.securevault.app.data.backup
 
+import com.securevault.app.data.repository.model.CardData
 import com.securevault.app.data.repository.model.Credential
 import com.securevault.app.data.repository.model.CredentialType
 import com.securevault.app.data.repository.model.PasskeyData
@@ -170,6 +171,34 @@ class BackupManagerTest {
         assertEquals(CredentialType.PASSKEY.name, backup.credentialType)
         assertEquals(passkeyData, restored.passkeyData)
         assertEquals(CredentialType.PASSKEY, restored.credentialType)
+        assertNull(restored.password)
+    }
+
+    @Test
+    fun `card backup roundtrip preserves card data`() {
+        val cardData = CardData(
+            cardholderName = "TARO YAMADA",
+            cardNumber = "4111111111111111",
+            expirationMonth = 12,
+            expirationYear = 2028,
+            securityCode = "123"
+        )
+        val original = Credential(
+            serviceName = "Visa",
+            serviceUrl = "https://cards.example.com",
+            username = "1111",
+            notes = "Business card",
+            category = "finance",
+            cardData = cardData,
+            credentialType = CredentialType.CARD
+        )
+
+        val backup = original.toBackup()
+        val restored = backup.toCredential()
+
+        assertEquals(CredentialType.CARD.name, backup.credentialType)
+        assertEquals(cardData, restored.cardData)
+        assertEquals(CredentialType.CARD, restored.credentialType)
         assertNull(restored.password)
     }
 

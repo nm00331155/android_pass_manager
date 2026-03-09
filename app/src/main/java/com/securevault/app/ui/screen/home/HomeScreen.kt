@@ -316,7 +316,7 @@ private fun CredentialListItem(
                 style = MaterialTheme.typography.titleSmall
             )
             HighlightedText(
-                text = credential.username,
+                text = credential.listSubtitle,
                 highlight = searchQuery,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -384,6 +384,7 @@ private fun DismissBackground(modifier: Modifier = Modifier) {
 
 @Composable
 private fun credentialTypeLabel(credential: Credential): String = when {
+    credential.isCard -> stringResource(R.string.credential_type_card)
     credential.isPasskey -> stringResource(R.string.credential_type_passkey)
     credential.hasPassword -> stringResource(R.string.credential_type_password)
     else -> stringResource(R.string.credential_type_id_only)

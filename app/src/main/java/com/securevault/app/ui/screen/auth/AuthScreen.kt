@@ -36,6 +36,7 @@ fun AuthScreen(
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     var shouldReveal by remember { mutableStateOf(false) }
+    var autoPromptAttempted by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = remember(context) { context.findFragmentActivity() }
     val authAvailability = remember(context) { viewModel.getAuthAvailability(context) }
@@ -63,6 +64,26 @@ fun AuthScreen(
 
     LaunchedEffect(Unit) {
         shouldReveal = true
+    }
+
+    LaunchedEffect(activity) {
+        autoPromptAttempted = false
+        viewModel.prepareForEntry()
+    }
+
+    LaunchedEffect(authAvailable, activity, authState, autoPromptAttempted) {
+        val fragmentActivity = activity ?: return@LaunchedEffect
+        if (!authAvailable || autoPromptAttempted || authState !is AuthUiState.Idle) {
+            return@LaunchedEffect
+        }
+
+        autoPromptAttempted = true
+        viewModel.authenticate(
+            activity = fragmentActivity,
+            title = appName,
+            subtitle = authSubtitle,
+            onAuthenticated = onAuthenticated
+        )
     }
 
     Scaffold {
@@ -100,6 +121,7 @@ fun AuthScreen(
                         viewModel.setError(authActivityMissingMessage)
                         return@Button
                     }
+                    autoPromptAttempted = true
                     viewModel.authenticate(
                         activity = fragmentActivity,
                         title = appName,

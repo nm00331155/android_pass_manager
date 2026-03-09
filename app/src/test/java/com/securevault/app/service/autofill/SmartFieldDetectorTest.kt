@@ -3,6 +3,7 @@ package com.securevault.app.service.autofill
 import android.app.assist.AssistStructure
 import android.text.InputType
 import android.util.Pair as AndroidPair
+import android.view.View
 import android.view.ViewStructure
 import android.view.autofill.AutofillId
 import com.securevault.app.util.AppLogger
@@ -85,6 +86,50 @@ class SmartFieldDetectorTest {
         assertEquals(focusedId, detected.usernameId)
         assertEquals(passwordId, detected.passwordId)
         assertTrue(detected.focusedNodeInfo?.isTextInputLike == true)
+        assertTrue(detected.focusedNodeInfo?.supportsAutofillTrigger == true)
+    }
+
+    @Test
+    fun `credit card fields are detected as card autofill targets`() {
+        val cardNumberId = autofillId("card-number")
+        val expiryId = autofillId("card-exp")
+        val cvcId = autofillId("card-cvc")
+        val structure = structureOf(
+            node(
+                autofillId = cardNumberId,
+                idEntry = "card_number",
+                hint = "Card number",
+                inputType = InputType.TYPE_CLASS_NUMBER,
+                htmlTag = "input",
+                htmlAttributes = listOf("autocomplete" to "cc-number"),
+                autofillHints = arrayOf(View.AUTOFILL_HINT_CREDIT_CARD_NUMBER)
+            ),
+            node(
+                autofillId = expiryId,
+                idEntry = "cc_exp",
+                hint = "MM/YY",
+                inputType = InputType.TYPE_CLASS_NUMBER,
+                htmlTag = "input",
+                htmlAttributes = listOf("autocomplete" to "cc-exp"),
+                autofillHints = arrayOf(View.AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DATE)
+            ),
+            node(
+                autofillId = cvcId,
+                idEntry = "security_code",
+                hint = "CVC",
+                inputType = InputType.TYPE_CLASS_NUMBER,
+                htmlTag = "input",
+                htmlAttributes = listOf("autocomplete" to "cc-csc"),
+                autofillHints = arrayOf(View.AUTOFILL_HINT_CREDIT_CARD_SECURITY_CODE)
+            )
+        )
+
+        val detected = detector.detect(structure, cardNumberId)
+
+        assertEquals(cardNumberId, detected.cardNumberId)
+        assertEquals(expiryId, detected.cardExpirationDateId)
+        assertEquals(cvcId, detected.cardSecurityCodeId)
+        assertEquals(SmartFieldDetector.CredentialKind.CARD, detected.focusedNodeInfo?.credentialKind)
         assertTrue(detected.focusedNodeInfo?.supportsAutofillTrigger == true)
     }
 

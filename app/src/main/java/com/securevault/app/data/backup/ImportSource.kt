@@ -130,7 +130,12 @@ enum class ImportSource(
             password = "password",
             notes = "notes",
             category = "category",
-            credentialType = "credentialType"
+            credentialType = "credentialType",
+            cardholderName = "cardholderName",
+            cardNumber = "cardNumber",
+            expirationMonth = "expirationMonth",
+            expirationYear = "expirationYear",
+            securityCode = "securityCode"
         )
     )
 }
@@ -145,5 +150,10 @@ data class CsvColumnMapping(
     val password: String,
     val notes: String?,
     val category: String? = null,
-    val credentialType: String? = null
+    val credentialType: String? = null,
+    val cardholderName: String? = null,
+    val cardNumber: String? = null,
+    val expirationMonth: String? = null,
+    val expirationYear: String? = null,
+    val securityCode: String? = null
 )

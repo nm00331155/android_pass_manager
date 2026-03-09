@@ -35,5 +35,13 @@ data class CredentialEntity(
     val passkeyOrigin: String? = null,
     val passkeySignCount: Long = 0,
     val encryptedPasskeyDisplayName: String? = null,
-    val passkeyDisplayNameIv: String? = null
+    val passkeyDisplayNameIv: String? = null,
+    val encryptedCardholderName: String? = null,
+    val cardholderNameIv: String? = null,
+    val encryptedCardNumber: String? = null,
+    val cardNumberIv: String? = null,
+    val cardExpirationMonth: Int? = null,
+    val cardExpirationYear: Int? = null,
+    val encryptedCardSecurityCode: String? = null,
+    val cardSecurityCodeIv: String? = null
 )

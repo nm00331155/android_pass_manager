@@ -109,7 +109,9 @@ class BackupManager @Inject constructor(
 
         context.contentResolver.openOutputStream(outputUri)?.use { outputStream ->
             OutputStreamWriter(outputStream, Charsets.UTF_8).use { writer ->
-                writer.write("serviceName,serviceUrl,username,password,notes,category,credentialType\n")
+                writer.write(
+                    "serviceName,serviceUrl,username,password,notes,category,credentialType,cardholderName,cardNumber,expirationMonth,expirationYear,securityCode\n"
+                )
                 exportableCredentials.forEach { credential ->
                     val line = listOf(
                         credential.serviceName,
@@ -118,7 +120,12 @@ class BackupManager @Inject constructor(
                         credential.password.orEmpty(),
                         credential.notes.orEmpty(),
                         credential.category,
-                        credential.credentialType.name
+                        credential.credentialType.name,
+                        credential.cardData?.cardholderName.orEmpty(),
+                        credential.cardData?.normalizedCardNumber.orEmpty(),
+                        credential.cardData?.expirationMonth?.toString().orEmpty(),
+                        credential.cardData?.expirationYear?.toString().orEmpty(),
+                        credential.cardData?.securityCode.orEmpty()
                     ).joinToString(",") { escapeCsvField(it) }
                     writer.write("$line\n")
                 }
@@ -230,6 +237,8 @@ class BackupManager @Inject constructor(
             append(credential.credentialType.name)
             append("||")
             append(credential.passkeyData?.rpId.orEmpty())
+            append("||")
+            append(credential.cardData?.normalizedCardNumber.orEmpty())
         }
     }
 
@@ -242,6 +251,8 @@ class BackupManager @Inject constructor(
             append(credential.credentialType)
             append("||")
             append(credential.passkeyData?.rpId.orEmpty())
+            append("||")
+            append(credential.cardData?.cardNumber.orEmpty())
         }
     }
 

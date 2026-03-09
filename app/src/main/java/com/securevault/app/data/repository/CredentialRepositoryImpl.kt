@@ -4,6 +4,7 @@ import com.securevault.app.data.crypto.CryptoEngine
 import com.securevault.app.data.crypto.EncryptedData
 import com.securevault.app.data.db.dao.CredentialDao
 import com.securevault.app.data.db.entity.CredentialEntity
+import com.securevault.app.data.repository.model.CardData
 import com.securevault.app.data.repository.model.Credential
 import com.securevault.app.data.repository.model.CredentialType
 import com.securevault.app.data.repository.model.PasskeyData
@@ -165,6 +166,15 @@ class CredentialRepositoryImpl @Inject constructor(
         val passkeyDisplayNameEncrypted = passkeyData?.userDisplayName
             ?.takeIf { it.isNotBlank() }
             ?.let { encryptValue(it) }
+        val cardholderNameEncrypted = cardData?.cardholderName
+            ?.takeIf { it.isNotBlank() }
+            ?.let { encryptValue(it) }
+        val cardNumberEncrypted = cardData?.normalizedCardNumber
+            ?.takeIf { it.isNotBlank() }
+            ?.let { encryptValue(it) }
+        val cardSecurityCodeEncrypted = cardData?.securityCode
+            ?.takeIf { it.isNotBlank() }
+            ?.let { encryptValue(it) }
 
         return CredentialEntity(
             id = id,
@@ -192,7 +202,15 @@ class CredentialRepositoryImpl @Inject constructor(
             passkeyOrigin = passkeyData?.origin,
             passkeySignCount = passkeyData?.signCount ?: 0,
             encryptedPasskeyDisplayName = passkeyDisplayNameEncrypted?.cipherText,
-            passkeyDisplayNameIv = passkeyDisplayNameEncrypted?.iv
+            passkeyDisplayNameIv = passkeyDisplayNameEncrypted?.iv,
+            encryptedCardholderName = cardholderNameEncrypted?.cipherText,
+            cardholderNameIv = cardholderNameEncrypted?.iv,
+            encryptedCardNumber = cardNumberEncrypted?.cipherText,
+            cardNumberIv = cardNumberEncrypted?.iv,
+            cardExpirationMonth = cardData?.expirationMonth,
+            cardExpirationYear = cardData?.expirationYear,
+            encryptedCardSecurityCode = cardSecurityCodeEncrypted?.cipherText,
+            cardSecurityCodeIv = cardSecurityCodeEncrypted?.iv
         )
     }
 
@@ -207,7 +225,8 @@ class CredentialRepositoryImpl @Inject constructor(
             }
             val resolvedType = credentialType.toCredentialType(
                 hasPassword = !encryptedPassword.isNullOrBlank(),
-                hasPasskey = !passkeyCredentialId.isNullOrBlank()
+                hasPasskey = !passkeyCredentialId.isNullOrBlank(),
+                hasCard = !encryptedCardNumber.isNullOrBlank()
             )
             val passkeyData = if (!passkeyCredentialId.isNullOrBlank()) {
                 PasskeyData(
@@ -238,6 +257,28 @@ class CredentialRepositoryImpl @Inject constructor(
             } else {
                 null
             }
+            val cardData = if (!encryptedCardNumber.isNullOrBlank()) {
+                CardData(
+                    cardholderName = decryptOptionalValue(
+                        encryptedCardholderName,
+                        cardholderNameIv
+                    ),
+                    cardNumber = decryptValue(
+                        encryptedCardNumber
+                            ?: error("encryptedCardNumber is missing for id=$id"),
+                        cardNumberIv
+                            ?: error("cardNumberIv is missing for id=$id")
+                    ),
+                    expirationMonth = cardExpirationMonth,
+                    expirationYear = cardExpirationYear,
+                    securityCode = decryptOptionalValue(
+                        encryptedCardSecurityCode,
+                        cardSecurityCodeIv
+                    )
+                )
+            } else {
+                null
+            }
 
             Credential(
                 id = id,
@@ -252,6 +293,7 @@ class CredentialRepositoryImpl @Inject constructor(
                 updatedAt = updatedAt,
                 isFavorite = isFavorite,
                 passkeyData = passkeyData,
+                cardData = cardData,
                 credentialType = resolvedType
             )
         }.onFailure { throwable ->
@@ -261,6 +303,7 @@ class CredentialRepositoryImpl @Inject constructor(
 
     private fun Credential.normalizedCredentialType(): CredentialType {
         return when {
+            cardData != null -> CredentialType.CARD
             passkeyData != null -> CredentialType.PASSKEY
             password.isNullOrBlank() -> CredentialType.ID_ONLY
             else -> credentialType
@@ -294,9 +337,14 @@ class CredentialRepositoryImpl @Inject constructor(
         return decryptValue(cipherTextBase64, ivBase64)
     }
 
-    private fun String.toCredentialType(hasPassword: Boolean, hasPasskey: Boolean): CredentialType {
+    private fun String.toCredentialType(
+        hasPassword: Boolean,
+        hasPasskey: Boolean,
+        hasCard: Boolean
+    ): CredentialType {
         return CredentialType.values().firstOrNull { it.name == this }
             ?: when {
+                hasCard -> CredentialType.CARD
                 hasPasskey -> CredentialType.PASSKEY
                 hasPassword -> CredentialType.PASSWORD
                 else -> CredentialType.ID_ONLY

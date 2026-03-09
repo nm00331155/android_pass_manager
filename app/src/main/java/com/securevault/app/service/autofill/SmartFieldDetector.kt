@@ -26,6 +26,12 @@ class SmartFieldDetector @Inject constructor(
     ): DetectedFields {
         var usernameId: AutofillId? = null
         var passwordId: AutofillId? = null
+        var cardholderNameId: AutofillId? = null
+        var cardNumberId: AutofillId? = null
+        var cardExpirationDateId: AutofillId? = null
+        var cardExpirationMonthId: AutofillId? = null
+        var cardExpirationYearId: AutofillId? = null
+        var cardSecurityCodeId: AutofillId? = null
         var otpId: AutofillId? = null
         var webDomain: String? = null
         var focusedNodeInfo: FocusedNodeInfo? = null
@@ -86,6 +92,54 @@ class SmartFieldDetector @Inject constructor(
                 )
             }
 
+            if (cardholderNameId == null && isCardholderNameField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
+                cardholderNameId = node.autofillId
+                logger.d(
+                    TAG,
+                    "detect: FOUND cardholder field id=${node.autofillId}, idEntry=$idEntry, hint=${node.hint.orEmpty()}"
+                )
+            }
+
+            if (cardNumberId == null && isCardNumberField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
+                cardNumberId = node.autofillId
+                logger.d(
+                    TAG,
+                    "detect: FOUND card number field id=${node.autofillId}, idEntry=$idEntry, hint=${node.hint.orEmpty()}"
+                )
+            }
+
+            if (cardExpirationMonthId == null && isCardExpirationMonthField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
+                cardExpirationMonthId = node.autofillId
+                logger.d(
+                    TAG,
+                    "detect: FOUND card exp month field id=${node.autofillId}, idEntry=$idEntry, hint=${node.hint.orEmpty()}"
+                )
+            }
+
+            if (cardExpirationYearId == null && isCardExpirationYearField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
+                cardExpirationYearId = node.autofillId
+                logger.d(
+                    TAG,
+                    "detect: FOUND card exp year field id=${node.autofillId}, idEntry=$idEntry, hint=${node.hint.orEmpty()}"
+                )
+            }
+
+            if (cardExpirationDateId == null && isCardExpirationDateField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
+                cardExpirationDateId = node.autofillId
+                logger.d(
+                    TAG,
+                    "detect: FOUND card expiration field id=${node.autofillId}, idEntry=$idEntry, hint=${node.hint.orEmpty()}"
+                )
+            }
+
+            if (cardSecurityCodeId == null && isCardSecurityCodeField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
+                cardSecurityCodeId = node.autofillId
+                logger.d(
+                    TAG,
+                    "detect: FOUND card security code field id=${node.autofillId}, idEntry=$idEntry, hint=${node.hint.orEmpty()}"
+                )
+            }
+
             if (otpId == null && isOtpField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
                 otpId = node.autofillId
                 logger.d(
@@ -107,7 +161,7 @@ class SmartFieldDetector @Inject constructor(
 
         logger.d(
             TAG,
-            "detect result: focused=$focusedId, username=$usernameId, password=$passwordId, otp=$otpId, domain=$webDomain, pageTitles=${pageTitles.joinToString(limit = 2)}, totalIds=${allAutofillIds.size}"
+            "detect result: focused=$focusedId, username=$usernameId, password=$passwordId, cardholder=$cardholderNameId, cardNumber=$cardNumberId, expDate=$cardExpirationDateId, expMonth=$cardExpirationMonthId, expYear=$cardExpirationYearId, cvc=$cardSecurityCodeId, otp=$otpId, domain=$webDomain, pageTitles=${pageTitles.joinToString(limit = 2)}, totalIds=${allAutofillIds.size}"
         )
 
         return DetectedFields(
@@ -115,6 +169,12 @@ class SmartFieldDetector @Inject constructor(
             focusedNodeInfo = focusedNodeInfo,
             usernameId = usernameId,
             passwordId = passwordId,
+            cardholderNameId = cardholderNameId,
+            cardNumberId = cardNumberId,
+            cardExpirationDateId = cardExpirationDateId,
+            cardExpirationMonthId = cardExpirationMonthId,
+            cardExpirationYearId = cardExpirationYearId,
+            cardSecurityCodeId = cardSecurityCodeId,
             otpId = otpId,
             webDomain = webDomain,
             pageTitle = pageTitles.firstOrNull(),
@@ -219,6 +279,10 @@ class SmartFieldDetector @Inject constructor(
         nodeText: String,
         htmlTokens: List<String>
     ): Boolean {
+        if (isCardSecurityCodeField(node, hints, idEntry, hintText, nodeText, htmlTokens)) {
+            return false
+        }
+
         val textInputLike = isTextInputLike(node, hints, htmlTokens)
         val allTokens = buildList {
             addAll(hints)
@@ -247,6 +311,197 @@ class SmartFieldDetector @Inject constructor(
         val inputClass = node.inputType and InputType.TYPE_MASK_CLASS
         val maxLength = node.maxTextLength
         return inputClass == InputType.TYPE_CLASS_NUMBER && maxLength in OTP_MIN_LENGTH..OTP_MAX_LENGTH
+    }
+
+    private fun isCardholderNameField(
+        node: AssistStructure.ViewNode,
+        hints: List<String>,
+        idEntry: String,
+        hintText: String,
+        nodeText: String,
+        htmlTokens: List<String>
+    ): Boolean {
+        if (!isTextInputLike(node, hints, htmlTokens)) {
+            return false
+        }
+
+        val allTokens = buildList {
+            addAll(hints)
+            add(idEntry)
+            add(hintText)
+            add(nodeText)
+            addAll(htmlTokens)
+        }
+
+        return allTokens.any { token ->
+            CARDHOLDER_NAME_KEYWORDS.any { keyword -> token.contains(keyword) }
+        }
+    }
+
+    private fun isCardNumberField(
+        node: AssistStructure.ViewNode,
+        hints: List<String>,
+        idEntry: String,
+        hintText: String,
+        nodeText: String,
+        htmlTokens: List<String>
+    ): Boolean {
+        val officialHint = hints.any {
+            it == View.AUTOFILL_HINT_CREDIT_CARD_NUMBER.lowercase(Locale.ROOT)
+        }
+        if (officialHint) {
+            return true
+        }
+
+        if (!isTextInputLike(node, hints, htmlTokens)) {
+            return false
+        }
+
+        val allTokens = buildList {
+            addAll(hints)
+            add(idEntry)
+            add(hintText)
+            add(nodeText)
+            addAll(htmlTokens)
+        }
+
+        return allTokens.any { token ->
+            CARD_NUMBER_KEYWORDS.any { keyword -> token.contains(keyword) }
+        }
+    }
+
+    private fun isCardExpirationDateField(
+        node: AssistStructure.ViewNode,
+        hints: List<String>,
+        idEntry: String,
+        hintText: String,
+        nodeText: String,
+        htmlTokens: List<String>
+    ): Boolean {
+        if (isCardExpirationMonthField(node, hints, idEntry, hintText, nodeText, htmlTokens) ||
+            isCardExpirationYearField(node, hints, idEntry, hintText, nodeText, htmlTokens)
+        ) {
+            return false
+        }
+
+        val officialHint = hints.any {
+            it == View.AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_DATE.lowercase(Locale.ROOT)
+        }
+        if (officialHint) {
+            return true
+        }
+
+        if (!isTextInputLike(node, hints, htmlTokens)) {
+            return false
+        }
+
+        val allTokens = buildList {
+            addAll(hints)
+            add(idEntry)
+            add(hintText)
+            add(nodeText)
+            addAll(htmlTokens)
+        }
+
+        return allTokens.any { token ->
+            CARD_EXPIRATION_KEYWORDS.any { keyword -> token.contains(keyword) }
+        }
+    }
+
+    private fun isCardExpirationMonthField(
+        node: AssistStructure.ViewNode,
+        hints: List<String>,
+        idEntry: String,
+        hintText: String,
+        nodeText: String,
+        htmlTokens: List<String>
+    ): Boolean {
+        val officialHint = hints.any {
+            it == View.AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_MONTH.lowercase(Locale.ROOT)
+        }
+        if (officialHint) {
+            return true
+        }
+
+        if (!isTextInputLike(node, hints, htmlTokens)) {
+            return false
+        }
+
+        val allTokens = buildList {
+            addAll(hints)
+            add(idEntry)
+            add(hintText)
+            add(nodeText)
+            addAll(htmlTokens)
+        }
+
+        return allTokens.any { token ->
+            CARD_EXPIRATION_MONTH_KEYWORDS.any { keyword -> token.contains(keyword) }
+        }
+    }
+
+    private fun isCardExpirationYearField(
+        node: AssistStructure.ViewNode,
+        hints: List<String>,
+        idEntry: String,
+        hintText: String,
+        nodeText: String,
+        htmlTokens: List<String>
+    ): Boolean {
+        val officialHint = hints.any {
+            it == View.AUTOFILL_HINT_CREDIT_CARD_EXPIRATION_YEAR.lowercase(Locale.ROOT)
+        }
+        if (officialHint) {
+            return true
+        }
+
+        if (!isTextInputLike(node, hints, htmlTokens)) {
+            return false
+        }
+
+        val allTokens = buildList {
+            addAll(hints)
+            add(idEntry)
+            add(hintText)
+            add(nodeText)
+            addAll(htmlTokens)
+        }
+
+        return allTokens.any { token ->
+            CARD_EXPIRATION_YEAR_KEYWORDS.any { keyword -> token.contains(keyword) }
+        }
+    }
+
+    private fun isCardSecurityCodeField(
+        node: AssistStructure.ViewNode,
+        hints: List<String>,
+        idEntry: String,
+        hintText: String,
+        nodeText: String,
+        htmlTokens: List<String>
+    ): Boolean {
+        val officialHint = hints.any {
+            it == View.AUTOFILL_HINT_CREDIT_CARD_SECURITY_CODE.lowercase(Locale.ROOT)
+        }
+        if (officialHint) {
+            return true
+        }
+
+        if (!isTextInputLike(node, hints, htmlTokens)) {
+            return false
+        }
+
+        val allTokens = buildList {
+            addAll(hints)
+            add(idEntry)
+            add(hintText)
+            add(nodeText)
+            addAll(htmlTokens)
+        }
+
+        return allTokens.any { token ->
+            CARD_SECURITY_CODE_KEYWORDS.any { keyword -> token.contains(keyword) }
+        }
     }
 
     private fun isTextInputLike(
@@ -308,6 +563,12 @@ class SmartFieldDetector @Inject constructor(
         val textInputLike = isTextInputLike(node, hints, htmlTokens)
         val usernameCandidate = isUsernameField(node, hints, idEntry, hintText, nodeText, htmlTokens)
         val passwordCandidate = isPasswordField(node, hints, idEntry, hintText, nodeText, htmlTokens)
+        val cardCandidate = isCardholderNameField(node, hints, idEntry, hintText, nodeText, htmlTokens) ||
+            isCardNumberField(node, hints, idEntry, hintText, nodeText, htmlTokens) ||
+            isCardExpirationDateField(node, hints, idEntry, hintText, nodeText, htmlTokens) ||
+            isCardExpirationMonthField(node, hints, idEntry, hintText, nodeText, htmlTokens) ||
+            isCardExpirationYearField(node, hints, idEntry, hintText, nodeText, htmlTokens) ||
+            isCardSecurityCodeField(node, hints, idEntry, hintText, nodeText, htmlTokens)
         val otpCandidate = isOtpField(node, hints, idEntry, hintText, nodeText, htmlTokens)
 
         return FocusedNodeInfo(
@@ -317,7 +578,13 @@ class SmartFieldDetector @Inject constructor(
             hintText = hintText,
             htmlTokens = htmlTokens,
             isTextInputLike = textInputLike,
-            supportsAutofillTrigger = textInputLike || usernameCandidate || passwordCandidate || otpCandidate
+            supportsAutofillTrigger = textInputLike || usernameCandidate || passwordCandidate || cardCandidate || otpCandidate,
+            credentialKind = when {
+                cardCandidate -> CredentialKind.CARD
+                usernameCandidate || passwordCandidate -> CredentialKind.LOGIN
+                otpCandidate -> CredentialKind.OTP
+                else -> null
+            }
         )
     }
 
@@ -343,6 +610,12 @@ class SmartFieldDetector @Inject constructor(
         val focusedNodeInfo: FocusedNodeInfo?,
         val usernameId: AutofillId?,
         val passwordId: AutofillId?,
+        val cardholderNameId: AutofillId?,
+        val cardNumberId: AutofillId?,
+        val cardExpirationDateId: AutofillId?,
+        val cardExpirationMonthId: AutofillId?,
+        val cardExpirationYearId: AutofillId?,
+        val cardSecurityCodeId: AutofillId?,
         val otpId: AutofillId?,
         val webDomain: String?,
         val pageTitle: String?,
@@ -356,8 +629,15 @@ class SmartFieldDetector @Inject constructor(
         val hintText: String,
         val htmlTokens: List<String>,
         val isTextInputLike: Boolean,
-        val supportsAutofillTrigger: Boolean
+        val supportsAutofillTrigger: Boolean,
+        val credentialKind: CredentialKind?
     )
+
+    enum class CredentialKind {
+        LOGIN,
+        CARD,
+        OTP
+    }
 
     private companion object {
         const val TAG = "SmartFieldDetector"
@@ -419,6 +699,64 @@ class SmartFieldDetector @Inject constructor(
             "ワンタイム",
             "二段階",
             "確認番号"
+        )
+
+        val CARDHOLDER_NAME_KEYWORDS = listOf(
+            "cc-name",
+            "cardholder",
+            "cardholdername",
+            "cardholder_name",
+            "card holder",
+            "nameoncard",
+            "cardname",
+            "holdername",
+            "名義",
+            "カード名義"
+        )
+
+        val CARD_NUMBER_KEYWORDS = listOf(
+            "cc-number",
+            "cardnumber",
+            "card_number",
+            "cardno",
+            "card_no",
+            "creditcard",
+            "credit-card",
+            "カード番号"
+        )
+
+        val CARD_EXPIRATION_KEYWORDS = listOf(
+            "cc-exp",
+            "expiry",
+            "expiration",
+            "validthru",
+            "valid thru",
+            "有効期限"
+        )
+
+        val CARD_EXPIRATION_MONTH_KEYWORDS = listOf(
+            "cc-exp-month",
+            "expmonth",
+            "expirymonth",
+            "expirationmonth"
+        )
+
+        val CARD_EXPIRATION_YEAR_KEYWORDS = listOf(
+            "cc-exp-year",
+            "expyear",
+            "expiryyear",
+            "expirationyear"
+        )
+
+        val CARD_SECURITY_CODE_KEYWORDS = listOf(
+            "cvc",
+            "cvv",
+            "csc",
+            "securitycode",
+            "security code",
+            "cardcode",
+            "カードコード",
+            "セキュリティコード"
         )
     }
 }

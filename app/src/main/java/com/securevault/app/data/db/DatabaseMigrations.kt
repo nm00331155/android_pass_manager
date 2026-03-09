@@ -108,4 +108,17 @@ object DatabaseMigrations {
             database.execSQL("ALTER TABLE `credentials_new` RENAME TO `credentials`")
         }
     }
+
+    val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            database.execSQL("ALTER TABLE `credentials` ADD COLUMN `encryptedCardholderName` TEXT")
+            database.execSQL("ALTER TABLE `credentials` ADD COLUMN `cardholderNameIv` TEXT")
+            database.execSQL("ALTER TABLE `credentials` ADD COLUMN `encryptedCardNumber` TEXT")
+            database.execSQL("ALTER TABLE `credentials` ADD COLUMN `cardNumberIv` TEXT")
+            database.execSQL("ALTER TABLE `credentials` ADD COLUMN `cardExpirationMonth` INTEGER")
+            database.execSQL("ALTER TABLE `credentials` ADD COLUMN `cardExpirationYear` INTEGER")
+            database.execSQL("ALTER TABLE `credentials` ADD COLUMN `encryptedCardSecurityCode` TEXT")
+            database.execSQL("ALTER TABLE `credentials` ADD COLUMN `cardSecurityCodeIv` TEXT")
+        }
+    }
 }

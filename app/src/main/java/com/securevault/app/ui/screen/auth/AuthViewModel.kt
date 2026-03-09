@@ -52,6 +52,10 @@ class AuthViewModel @Inject constructor(
         subtitle: String,
         onAuthenticated: () -> Unit
     ) {
+        if (authState.value is AuthUiState.Authenticating) {
+            return
+        }
+
         _errorMessage.value = null
         biometricAuthManager.authenticate(
             activity = activity,
@@ -68,6 +72,18 @@ class AuthViewModel @Inject constructor(
                 // フォールバック状態は authState 経由で UI 側に反映する。
             }
         )
+    }
+
+    /**
+     * 認証画面表示時に前回の認証状態を持ち越さないよう初期化する。
+     */
+    fun prepareForEntry() {
+        if (authState.value is AuthUiState.Authenticating) {
+            return
+        }
+
+        biometricAuthManager.resetState()
+        clearError()
     }
 
     /** UI表示用のエラーメッセージを明示設定する。 */

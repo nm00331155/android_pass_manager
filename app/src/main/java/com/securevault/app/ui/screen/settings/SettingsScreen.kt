@@ -2,6 +2,7 @@ package com.securevault.app.ui.screen.settings
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
@@ -160,6 +161,11 @@ fun SettingsScreen(
                 onCheckedChange = viewModel::updateOtpClipboardEnabled
             )
 
+            Text(
+                text = stringResource(R.string.settings_credentials),
+                style = MaterialTheme.typography.titleMedium
+            )
+
             Button(
                 onClick = {
                     val intent = Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE).apply {
@@ -167,11 +173,47 @@ fun SettingsScreen(
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     runCatching { context.startActivity(intent) }
+                        .onFailure {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.settings_credential_provider_unavailable)
+                                )
+                            }
+                        }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(text = stringResource(R.string.open_autofill_settings))
             }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_CREDENTIAL_PROVIDER).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            )
+                        }.onFailure {
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.settings_credential_provider_unavailable)
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = stringResource(R.string.open_credential_provider_settings))
+                }
+            }
+
+            Text(
+                text = stringResource(R.string.settings_credential_provider_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Text(
                 text = stringResource(R.string.settings_autofill_browser_note),

@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.securevault.app.data.repository.CredentialRepository
+import com.securevault.app.data.repository.model.CardData
 import com.securevault.app.data.repository.model.Credential
 import com.securevault.app.data.repository.model.CredentialType
 import com.securevault.app.data.repository.model.PasskeyData
@@ -41,11 +42,29 @@ class AddEditViewModel @Inject constructor(
     private val _serviceUrl = MutableStateFlow("")
     val serviceUrl: StateFlow<String> = _serviceUrl.asStateFlow()
 
+    private val _credentialType = MutableStateFlow(CredentialType.PASSWORD)
+    val credentialType: StateFlow<CredentialType> = _credentialType.asStateFlow()
+
     private val _username = MutableStateFlow("")
     val username: StateFlow<String> = _username.asStateFlow()
 
     private val _password = MutableStateFlow("")
     val password: StateFlow<String> = _password.asStateFlow()
+
+    private val _cardholderName = MutableStateFlow("")
+    val cardholderName: StateFlow<String> = _cardholderName.asStateFlow()
+
+    private val _cardNumber = MutableStateFlow("")
+    val cardNumber: StateFlow<String> = _cardNumber.asStateFlow()
+
+    private val _cardExpirationMonth = MutableStateFlow("")
+    val cardExpirationMonth: StateFlow<String> = _cardExpirationMonth.asStateFlow()
+
+    private val _cardExpirationYear = MutableStateFlow("")
+    val cardExpirationYear: StateFlow<String> = _cardExpirationYear.asStateFlow()
+
+    private val _cardSecurityCode = MutableStateFlow("")
+    val cardSecurityCode: StateFlow<String> = _cardSecurityCode.asStateFlow()
 
     private val _notes = MutableStateFlow("")
     val notes: StateFlow<String> = _notes.asStateFlow()
@@ -71,8 +90,28 @@ class AddEditViewModel @Inject constructor(
     private val _saveCompleted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val saveCompleted = _saveCompleted.asSharedFlow()
 
-    val isFormValid: StateFlow<Boolean> = combine(_serviceName, _username) { name, username ->
-        name.isNotBlank() && username.isNotBlank()
+    val isFormValid: StateFlow<Boolean> = combine(
+        _credentialType,
+        _serviceName,
+        _username,
+        _password,
+        _cardNumber
+    ) { selectedType, name, username, password, cardNumber ->
+        when (selectedType) {
+            CredentialType.PASSWORD -> {
+                name.isNotBlank() && username.isNotBlank() && password.isNotBlank()
+            }
+
+            CredentialType.ID_ONLY -> {
+                name.isNotBlank() && username.isNotBlank()
+            }
+
+            CredentialType.CARD -> {
+                name.isNotBlank() && cardNumber.filter(Char::isDigit).length in CARD_NUMBER_LENGTH_RANGE
+            }
+
+            CredentialType.PASSKEY -> false
+        }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -104,6 +143,16 @@ class AddEditViewModel @Inject constructor(
     }
 
     /**
+     * 種類を更新する。
+     */
+    fun updateCredentialType(value: CredentialType) {
+        _credentialType.value = value
+        if (value == CredentialType.CARD) {
+            _category.value = FINANCE_CATEGORY
+        }
+    }
+
+    /**
      * ユーザー名を更新する。
      */
     fun updateUsername(value: String) {
@@ -116,6 +165,41 @@ class AddEditViewModel @Inject constructor(
     fun updatePassword(value: String) {
         _password.value = value
         _passwordStrength.value = PasswordStrengthChecker.check(value)
+    }
+
+    /**
+     * カード名義を更新する。
+     */
+    fun updateCardholderName(value: String) {
+        _cardholderName.value = value
+    }
+
+    /**
+     * カード番号を更新する。
+     */
+    fun updateCardNumber(value: String) {
+        _cardNumber.value = value
+    }
+
+    /**
+     * カード有効期限（月）を更新する。
+     */
+    fun updateCardExpirationMonth(value: String) {
+        _cardExpirationMonth.value = value
+    }
+
+    /**
+     * カード有効期限（年）を更新する。
+     */
+    fun updateCardExpirationYear(value: String) {
+        _cardExpirationYear.value = value
+    }
+
+    /**
+     * セキュリティコードを更新する。
+     */
+    fun updateCardSecurityCode(value: String) {
+        _cardSecurityCode.value = value
     }
 
     /**
@@ -159,24 +243,65 @@ class AddEditViewModel @Inject constructor(
             _errorMessage.value = null
 
             val now = System.currentTimeMillis()
+            val selectedType = when {
+                existingPasskeyData != null -> CredentialType.PASSKEY
+                else -> _credentialType.value
+            }
             val normalizedPassword = _password.value.takeIf { it.isNotBlank() }
+            val normalizedCardNumber = _cardNumber.value.filter(Char::isDigit)
+            val expirationMonth = parseCardExpirationMonth(_cardExpirationMonth.value)
+            val expirationYear = parseCardExpirationYear(_cardExpirationYear.value)
+
+            if (selectedType == CredentialType.CARD) {
+                if (normalizedCardNumber.length !in CARD_NUMBER_LENGTH_RANGE) {
+                    _errorMessage.value = "カード番号は12〜19桁で入力してください。"
+                    _isSaving.value = false
+                    return@launch
+                }
+
+                val hasExpirationInput =
+                    _cardExpirationMonth.value.isNotBlank() || _cardExpirationYear.value.isNotBlank()
+                if (hasExpirationInput && (expirationMonth == null || expirationYear == null)) {
+                    _errorMessage.value = "有効期限は月と年を正しく入力してください。"
+                    _isSaving.value = false
+                    return@launch
+                }
+            }
+
+            val cardData = if (selectedType == CredentialType.CARD) {
+                CardData(
+                    cardholderName = _cardholderName.value.trim().ifBlank { null },
+                    cardNumber = normalizedCardNumber,
+                    expirationMonth = expirationMonth,
+                    expirationYear = expirationYear,
+                    securityCode = _cardSecurityCode.value.trim().ifBlank { null }
+                )
+            } else {
+                null
+            }
+
+            val resolvedUsername = if (selectedType == CredentialType.CARD) {
+                cardData?.cardholderName
+                    ?: normalizedCardNumber.takeLast(CARD_LABEL_DIGITS).ifBlank {
+                        _serviceName.value.trim()
+                    }
+            } else {
+                _username.value.trim()
+            }
             val payload = Credential(
                 id = if (isEditMode) credentialId else 0L,
                 serviceName = _serviceName.value.trim(),
                 serviceUrl = _serviceUrl.value.trim().ifBlank { null },
-                username = _username.value.trim(),
-                password = normalizedPassword,
+                username = resolvedUsername,
+                password = if (selectedType == CredentialType.PASSWORD) normalizedPassword else null,
                 notes = _notes.value.ifBlank { null },
-                category = _category.value,
+                category = if (selectedType == CredentialType.CARD) FINANCE_CATEGORY else _category.value,
                 createdAt = createdAtMillis,
                 updatedAt = now,
                 isFavorite = _isFavorite.value,
                 passkeyData = existingPasskeyData,
-                credentialType = when {
-                    existingPasskeyData != null -> CredentialType.PASSKEY
-                    normalizedPassword.isNullOrBlank() -> CredentialType.ID_ONLY
-                    else -> CredentialType.PASSWORD
-                }
+                cardData = cardData,
+                credentialType = selectedType
             )
 
             runCatching {
@@ -206,8 +331,14 @@ class AddEditViewModel @Inject constructor(
                 ?.let { credential ->
                     _serviceName.value = credential.serviceName
                     _serviceUrl.value = credential.serviceUrl.orEmpty()
+                    _credentialType.value = credential.credentialType
                     _username.value = credential.username
                     _password.value = credential.password.orEmpty()
+                    _cardholderName.value = credential.cardData?.cardholderName.orEmpty()
+                    _cardNumber.value = credential.cardData?.normalizedCardNumber.orEmpty()
+                    _cardExpirationMonth.value = credential.cardData?.expirationMonth?.toString().orEmpty()
+                    _cardExpirationYear.value = credential.cardData?.expirationYear?.toString().orEmpty()
+                    _cardSecurityCode.value = credential.cardData?.securityCode.orEmpty()
                     _notes.value = credential.notes.orEmpty()
                     _category.value = credential.category
                     _isFavorite.value = credential.isFavorite
@@ -230,10 +361,28 @@ class AddEditViewModel @Inject constructor(
         }
     }
 
+    private fun parseCardExpirationMonth(value: String): Int? {
+        val month = value.filter(Char::isDigit).toIntOrNull() ?: return null
+        return month.takeIf { it in 1..12 }
+    }
+
+    private fun parseCardExpirationYear(value: String): Int? {
+        val digits = value.filter(Char::isDigit)
+        return when (digits.length) {
+            0 -> null
+            2 -> 2000 + digits.toInt()
+            4 -> digits.toIntOrNull()
+            else -> null
+        }
+    }
+
     private companion object {
         const val ARG_CREDENTIAL_ID = "credentialId"
         const val GENERATED_PASSWORD_KEY = "generated_password"
         const val NO_CREDENTIAL_ID = -1L
         const val DEFAULT_CATEGORY = "other"
+        const val FINANCE_CATEGORY = "finance"
+        const val CARD_LABEL_DIGITS = 4
+        val CARD_NUMBER_LENGTH_RANGE = 12..19
     }
 }

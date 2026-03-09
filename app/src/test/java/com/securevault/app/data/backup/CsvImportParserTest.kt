@@ -292,6 +292,27 @@ class CsvImportParserTest {
     }
 
     @Test
+    fun `parse SecureVault CSV restores card rows`() {
+        val csv = """
+            serviceName,serviceUrl,username,password,notes,category,credentialType,cardholderName,cardNumber,expirationMonth,expirationYear,securityCode
+            Visa,https://cards.example.com,1111,,Business card,finance,CARD,TARO YAMADA,4111111111111111,12,2028,123
+        """.trimIndent()
+
+        val result = parser.parse(csv, ImportSource.SECUREVAULT)
+
+        assertEquals(1, result.size)
+        assertEquals("Visa", result[0].serviceName)
+        assertEquals(CredentialType.CARD.name, result[0].credentialType)
+        assertNull(result[0].password)
+        assertEquals("1111", result[0].username)
+        assertEquals("TARO YAMADA", result[0].cardData?.cardholderName)
+        assertEquals("4111111111111111", result[0].cardData?.cardNumber)
+        assertEquals(12, result[0].cardData?.expirationMonth)
+        assertEquals(2028, result[0].cardData?.expirationYear)
+        assertEquals("123", result[0].cardData?.securityCode)
+    }
+
+    @Test
     fun `parse SecureVault CSV skips passkey rows`() {
         val csv = """
             serviceName,serviceUrl,username,password,notes,category,credentialType

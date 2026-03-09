@@ -29,9 +29,18 @@ fun SecureVaultNavGraph(
     val isLocked by navGuardViewModel.isLocked.collectAsStateWithLifecycle()
 
     LaunchedEffect(isLocked, currentRoute) {
-        if (isLocked && currentRoute != NavRoutes.Auth) {
-            navController.navigate(NavRoutes.Auth) {
-                launchSingleTop = true
+        when {
+            isLocked && currentRoute != NavRoutes.Auth -> {
+                navController.navigate(NavRoutes.Auth) {
+                    launchSingleTop = true
+                }
+            }
+
+            !isLocked && currentRoute == NavRoutes.Auth -> {
+                navController.navigate(NavRoutes.Home) {
+                    popUpTo(NavRoutes.Auth) { inclusive = true }
+                    launchSingleTop = true
+                }
             }
         }
     }

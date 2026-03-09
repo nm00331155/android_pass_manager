@@ -65,6 +65,12 @@
     <string name="field_category">カテゴリ</string>
     <string name="field_credential_type">種類</string>
     <string name="field_passkey_rp_id">RP ID</string>
+    <string name="field_cardholder_name">カード名義</string>
+    <string name="field_card_number_required">カード番号（必須）</string>
+    <string name="field_card_expiration">有効期限</string>
+    <string name="field_card_expiration_month">有効期限（月）</string>
+    <string name="field_card_expiration_year">有効期限（年）</string>
+    <string name="field_card_security_code">セキュリティコード</string>
 
     <!-- 保存・操作 -->
     <string name="save_action">保存</string>
@@ -84,6 +90,10 @@
     <string name="credential_type_password">パスワード</string>
     <string name="credential_type_id_only">IDのみ</string>
     <string name="credential_type_passkey">パスキー</string>
+    <string name="credential_type_card">クレジットカード</string>
+    <string name="add_edit_type_password">ログイン情報</string>
+    <string name="add_edit_type_id_only">IDのみ</string>
+    <string name="add_edit_type_card">クレジットカード</string>
 
     <!-- パスワード生成 -->
     <string name="regenerate_action">再生成</string>
@@ -103,14 +113,19 @@
     <string name="settings_delete_all">すべてのデータを削除</string>
     <string name="settings_app_info">アプリ情報</string>
     <string name="settings_version">バージョン: %1$s</string>
-    <string name="open_autofill_settings">自動入力の設定を開く</string>
+    <string name="settings_credentials">パスワード・パスキー・自動入力</string>
+    <string name="open_autofill_settings">優先サービスの設定を開く</string>
+    <string name="open_credential_provider_settings">プロバイダ管理を開く</string>
     <string name="settings_otp">OTP（ワンタイムパスワード）</string>
     <string name="settings_sms_otp">SMS ワンタイム自動入力</string>
     <string name="settings_notification_otp">通知からの OTP 読取</string>
     <string name="settings_clipboard_otp">クリップボードの OTP 検出</string>
     <string name="settings_export_log">診断ログをエクスポート</string>
+    <string name="settings_credential_provider_note">Samsung Pass などの追加プロバイダが有効な場合は、この管理画面で無効にすると KeyPass へ一元化しやすくなります。</string>
+    <string name="settings_credential_provider_unavailable">この端末ではプロバイダ管理画面を開けませんでした。</string>
     <string name="settings_autofill_browser_note">Chrome / Brave / Edge では、ブラウザ設定の「自動入力サービス」から「別のサービスを使用して自動入力」を有効にしてください。</string>
     <string name="settings_log_exported">ログを出力しました</string>
+    <string name="category_finance_locked_note">クレジットカードは「金融」カテゴリで保存されます。</string>
 
     <!-- タイムアウト -->
     <string name="timeout_immediate">即時</string>
@@ -123,6 +138,9 @@
     <!-- コピー通知 -->
     <string name="password_copied">パスワード</string>
     <string name="username_copied">ユーザー名</string>
+    <string name="cardholder_name_copied">カード名義</string>
+    <string name="card_number_copied">カード番号</string>
+    <string name="card_security_code_copied">セキュリティコード</string>
     <string name="clipboard_auto_clear">%1$d 秒後にクリップボードを消去します</string>
 
     <!-- 確認ダイアログ -->
@@ -152,7 +170,7 @@
     <string name="backup_export_section">エクスポート</string>
     <string name="backup_export_encrypted">暗号化バックアップ (.securevault)</string>
     <string name="backup_export_csv">CSV エクスポート（平文）</string>
-    <string name="backup_export_csv_warning">パスワードが平文で保存されます。&#10;信頼できる場所にのみ保存してください。&#10;&#10;本当にエクスポートしますか？</string>
+    <string name="backup_export_csv_warning">パスワードとクレジットカード情報が平文で保存されます。&#10;信頼できる場所にのみ保存してください。&#10;&#10;本当にエクスポートしますか？</string>
     <string name="backup_import_section">インポート</string>
     <string name="backup_import_encrypted">暗号化バックアップから復元</string>
     <string name="backup_import_csv">CSV からインポート（KeyPass 形式）</string>

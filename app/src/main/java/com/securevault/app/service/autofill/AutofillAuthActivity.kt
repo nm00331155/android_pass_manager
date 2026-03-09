@@ -46,16 +46,34 @@ class AutofillAuthActivity : FragmentActivity() {
         val credentialId = intent.getLongExtra(EXTRA_CREDENTIAL_ID, INVALID_CREDENTIAL_ID)
         val usernameAutofillId = getAutofillIdExtra(EXTRA_USERNAME_AUTOFILL_ID)
         val passwordAutofillId = getAutofillIdExtra(EXTRA_PASSWORD_AUTOFILL_ID)
+        val cardholderNameAutofillId = getAutofillIdExtra(EXTRA_CARDHOLDER_NAME_AUTOFILL_ID)
+        val cardNumberAutofillId = getAutofillIdExtra(EXTRA_CARD_NUMBER_AUTOFILL_ID)
+        val cardExpirationDateAutofillId = getAutofillIdExtra(EXTRA_CARD_EXPIRATION_DATE_AUTOFILL_ID)
+        val cardExpirationMonthAutofillId = getAutofillIdExtra(EXTRA_CARD_EXPIRATION_MONTH_AUTOFILL_ID)
+        val cardExpirationYearAutofillId = getAutofillIdExtra(EXTRA_CARD_EXPIRATION_YEAR_AUTOFILL_ID)
+        val cardSecurityCodeAutofillId = getAutofillIdExtra(EXTRA_CARD_SECURITY_CODE_AUTOFILL_ID)
         val targetPackageName = intent.getStringExtra(EXTRA_TARGET_PACKAGE_NAME).orEmpty()
         val targetWebDomain = intent.getStringExtra(EXTRA_TARGET_WEB_DOMAIN)
         val authResultMode = intent.getStringExtra(EXTRA_AUTH_RESULT_MODE) ?: AUTH_RESULT_DATASET
 
         logger.d(
             TAG,
-            "AutofillAuthActivity args: credentialId=$credentialId, usernameAutofillId=$usernameAutofillId, passwordAutofillId=$passwordAutofillId, targetPackage=$targetPackageName, targetWebDomain=$targetWebDomain, authResultMode=$authResultMode"
+            "AutofillAuthActivity args: credentialId=$credentialId, usernameAutofillId=$usernameAutofillId, passwordAutofillId=$passwordAutofillId, cardholderNameAutofillId=$cardholderNameAutofillId, cardNumberAutofillId=$cardNumberAutofillId, cardExpirationDateAutofillId=$cardExpirationDateAutofillId, cardExpirationMonthAutofillId=$cardExpirationMonthAutofillId, cardExpirationYearAutofillId=$cardExpirationYearAutofillId, cardSecurityCodeAutofillId=$cardSecurityCodeAutofillId, targetPackage=$targetPackageName, targetWebDomain=$targetWebDomain, authResultMode=$authResultMode"
         )
 
-        if (credentialId == INVALID_CREDENTIAL_ID || (usernameAutofillId == null && passwordAutofillId == null)) {
+        if (
+            credentialId == INVALID_CREDENTIAL_ID ||
+            !hasAnyFillTarget(
+                usernameAutofillId = usernameAutofillId,
+                passwordAutofillId = passwordAutofillId,
+                cardholderNameAutofillId = cardholderNameAutofillId,
+                cardNumberAutofillId = cardNumberAutofillId,
+                cardExpirationDateAutofillId = cardExpirationDateAutofillId,
+                cardExpirationMonthAutofillId = cardExpirationMonthAutofillId,
+                cardExpirationYearAutofillId = cardExpirationYearAutofillId,
+                cardSecurityCodeAutofillId = cardSecurityCodeAutofillId
+            )
+        ) {
             logger.w(TAG, "Invalid intent extras for autofill auth")
             finishCanceled()
             return
@@ -71,6 +89,12 @@ class AutofillAuthActivity : FragmentActivity() {
                     credentialId = credentialId,
                     usernameAutofillId = usernameAutofillId,
                     passwordAutofillId = passwordAutofillId,
+                    cardholderNameAutofillId = cardholderNameAutofillId,
+                    cardNumberAutofillId = cardNumberAutofillId,
+                    cardExpirationDateAutofillId = cardExpirationDateAutofillId,
+                    cardExpirationMonthAutofillId = cardExpirationMonthAutofillId,
+                    cardExpirationYearAutofillId = cardExpirationYearAutofillId,
+                    cardSecurityCodeAutofillId = cardSecurityCodeAutofillId,
                     targetPackageName = targetPackageName,
                     targetWebDomain = targetWebDomain,
                     authResultMode = authResultMode
@@ -90,6 +114,12 @@ class AutofillAuthActivity : FragmentActivity() {
         credentialId: Long,
         usernameAutofillId: AutofillId?,
         passwordAutofillId: AutofillId?,
+        cardholderNameAutofillId: AutofillId?,
+        cardNumberAutofillId: AutofillId?,
+        cardExpirationDateAutofillId: AutofillId?,
+        cardExpirationMonthAutofillId: AutofillId?,
+        cardExpirationYearAutofillId: AutofillId?,
+        cardSecurityCodeAutofillId: AutofillId?,
         targetPackageName: String,
         targetWebDomain: String?,
         authResultMode: String
@@ -115,7 +145,7 @@ class AutofillAuthActivity : FragmentActivity() {
 
             logger.d(
                 TAG,
-                "Loaded credential: service=${credential.serviceName}, user=${credential.username}, hasPassword=${credential.hasPassword}, isPasskey=${credential.isPasskey}"
+                "Loaded credential: service=${credential.serviceName}, user=${credential.username}, hasPassword=${credential.hasPassword}, isPasskey=${credential.isPasskey}, isCard=${credential.isCard}"
             )
 
             val datasetBuilder = if (authResultMode == AUTH_RESULT_FILL_RESPONSE) {
@@ -124,7 +154,7 @@ class AutofillAuthActivity : FragmentActivity() {
                 Dataset.Builder(
                     RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
                         setTextViewText(R.id.service_name, credential.serviceName)
-                        setTextViewText(R.id.username, credential.username)
+                        setTextViewText(R.id.username, credential.listSubtitle)
                     }
                 )
             }
@@ -138,6 +168,43 @@ class AutofillAuthActivity : FragmentActivity() {
                     passwordAutofillId?.let { autofillId ->
                         setValue(autofillId, AutofillValue.forText(password))
                         logger.d(TAG, "Set password for autofillId=$autofillId")
+                    }
+                }
+
+                credential.cardData?.let { cardData ->
+                    cardholderNameAutofillId?.let { autofillId ->
+                        cardData.cardholderName?.takeIf { it.isNotBlank() }?.let { cardholderName ->
+                            setValue(autofillId, AutofillValue.forText(cardholderName))
+                            logger.d(TAG, "Set cardholder name for autofillId=$autofillId")
+                        }
+                    }
+                    cardNumberAutofillId?.let { autofillId ->
+                        setValue(autofillId, AutofillValue.forText(cardData.normalizedCardNumber))
+                        logger.d(TAG, "Set card number for autofillId=$autofillId")
+                    }
+                    cardExpirationDateAutofillId?.let { autofillId ->
+                        cardData.shortExpiration?.let { expiration ->
+                            setValue(autofillId, AutofillValue.forText(expiration))
+                            logger.d(TAG, "Set card expiration date for autofillId=$autofillId")
+                        }
+                    }
+                    cardExpirationMonthAutofillId?.let { autofillId ->
+                        cardData.expirationMonth?.let { month ->
+                            setValue(autofillId, AutofillValue.forText("%02d".format(month)))
+                            logger.d(TAG, "Set card expiration month for autofillId=$autofillId")
+                        }
+                    }
+                    cardExpirationYearAutofillId?.let { autofillId ->
+                        cardData.expirationYear?.let { year ->
+                            setValue(autofillId, AutofillValue.forText(year.toString()))
+                            logger.d(TAG, "Set card expiration year for autofillId=$autofillId")
+                        }
+                    }
+                    cardSecurityCodeAutofillId?.let { autofillId ->
+                        cardData.securityCode?.takeIf { it.isNotBlank() }?.let { securityCode ->
+                            setValue(autofillId, AutofillValue.forText(securityCode))
+                            logger.d(TAG, "Set card security code for autofillId=$autofillId")
+                        }
                     }
                 }
             }.build()
@@ -216,6 +283,26 @@ class AutofillAuthActivity : FragmentActivity() {
         finish()
     }
 
+    private fun hasAnyFillTarget(
+        usernameAutofillId: AutofillId?,
+        passwordAutofillId: AutofillId?,
+        cardholderNameAutofillId: AutofillId?,
+        cardNumberAutofillId: AutofillId?,
+        cardExpirationDateAutofillId: AutofillId?,
+        cardExpirationMonthAutofillId: AutofillId?,
+        cardExpirationYearAutofillId: AutofillId?,
+        cardSecurityCodeAutofillId: AutofillId?
+    ): Boolean {
+        return usernameAutofillId != null ||
+            passwordAutofillId != null ||
+            cardholderNameAutofillId != null ||
+            cardNumberAutofillId != null ||
+            cardExpirationDateAutofillId != null ||
+            cardExpirationMonthAutofillId != null ||
+            cardExpirationYearAutofillId != null ||
+            cardSecurityCodeAutofillId != null
+    }
+
     override fun onDestroy() {
         biometricAuthManager.resetState()
         super.onDestroy()
@@ -228,6 +315,12 @@ class AutofillAuthActivity : FragmentActivity() {
         const val EXTRA_CREDENTIAL_ID = "credentialId"
         const val EXTRA_USERNAME_AUTOFILL_ID = "usernameAutofillId"
         const val EXTRA_PASSWORD_AUTOFILL_ID = "passwordAutofillId"
+        const val EXTRA_CARDHOLDER_NAME_AUTOFILL_ID = "cardholderNameAutofillId"
+        const val EXTRA_CARD_NUMBER_AUTOFILL_ID = "cardNumberAutofillId"
+        const val EXTRA_CARD_EXPIRATION_DATE_AUTOFILL_ID = "cardExpirationDateAutofillId"
+        const val EXTRA_CARD_EXPIRATION_MONTH_AUTOFILL_ID = "cardExpirationMonthAutofillId"
+        const val EXTRA_CARD_EXPIRATION_YEAR_AUTOFILL_ID = "cardExpirationYearAutofillId"
+        const val EXTRA_CARD_SECURITY_CODE_AUTOFILL_ID = "cardSecurityCodeAutofillId"
         const val EXTRA_TARGET_PACKAGE_NAME = "targetPackageName"
         const val EXTRA_TARGET_WEB_DOMAIN = "targetWebDomain"
         const val EXTRA_AUTH_RESULT_MODE = "authResultMode"

@@ -57,8 +57,15 @@ class HomeViewModel @Inject constructor(
                 true
             } else {
                 val normalizedQuery = query.trim().lowercase()
-                credential.serviceName.lowercase().contains(normalizedQuery) ||
-                    credential.username.lowercase().contains(normalizedQuery)
+                listOfNotNull(
+                    credential.serviceName,
+                    credential.username,
+                    credential.cardData?.cardholderName,
+                    credential.cardData?.lastFourDigits,
+                    credential.cardData?.maskedCardNumber
+                ).any { value ->
+                    value.lowercase().contains(normalizedQuery)
+                }
             }
 
             val matchedCategory = category == null || credential.category == category

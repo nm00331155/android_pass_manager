@@ -59,6 +59,10 @@ class CsvImportParser @Inject constructor() {
                 ?.takeIf { it.isNotBlank() }
                 ?.let(::resolveCredentialType)
                 ?: if (password.isBlank()) CredentialType.ID_ONLY.name else CredentialType.PASSWORD.name
+            val cardNumber = columns.cardNumberIndex
+                ?.let { fields.getOrNull(it).orEmpty().trim() }
+                ?.filter(Char::isDigit)
+                .orEmpty()
             if (source != ImportSource.SECUREVAULT && password.isBlank()) {
                 return@mapNotNull null
             }
@@ -79,7 +83,38 @@ class CsvImportParser @Inject constructor() {
                 ?.ifBlank { "other" }
                 ?: "other"
 
-            if (password.isBlank() && username.isBlank()) {
+            val cardData = if (credentialType == CredentialType.CARD.name) {
+                if (cardNumber.isBlank()) {
+                    return@mapNotNull null
+                }
+
+                BackupCardData(
+                    cardholderName = columns.cardholderNameIndex
+                        ?.let { fields.getOrNull(it).orEmpty().trim() }
+                        ?.ifBlank { null },
+                    cardNumber = cardNumber,
+                    expirationMonth = columns.expirationMonthIndex
+                        ?.let { parseCardMonth(fields.getOrNull(it)) },
+                    expirationYear = columns.expirationYearIndex
+                        ?.let { parseCardYear(fields.getOrNull(it)) },
+                    securityCode = columns.securityCodeIndex
+                        ?.let { fields.getOrNull(it).orEmpty().trim() }
+                        ?.ifBlank { null }
+                )
+            } else {
+                null
+            }
+
+            val resolvedUsername = if (credentialType == CredentialType.CARD.name) {
+                username.ifBlank {
+                    cardData?.cardholderName
+                        ?: cardData?.cardNumber?.takeLast(4).orEmpty()
+                }
+            } else {
+                username
+            }
+
+            if (credentialType != CredentialType.CARD.name && password.isBlank() && resolvedUsername.isBlank()) {
                 return@mapNotNull null
             }
 
@@ -87,13 +122,14 @@ class CsvImportParser @Inject constructor() {
             BackupCredential(
                 serviceName = serviceName,
                 serviceUrl = serviceUrl,
-                username = username,
+                username = resolvedUsername,
                 password = password.ifBlank { null },
                 notes = notes,
                 category = category,
                 createdAt = now,
                 updatedAt = now,
-                credentialType = credentialType
+                credentialType = credentialType,
+                cardData = cardData
             )
         }
     }
@@ -130,7 +166,12 @@ class CsvImportParser @Inject constructor() {
             passwordIndex = requireIndex(mapping.password),
             notesIndex = findIndex(mapping.notes),
             categoryIndex = findIndex(mapping.category),
-            credentialTypeIndex = findIndex(mapping.credentialType)
+            credentialTypeIndex = findIndex(mapping.credentialType),
+            cardholderNameIndex = findIndex(mapping.cardholderName),
+            cardNumberIndex = findIndex(mapping.cardNumber),
+            expirationMonthIndex = findIndex(mapping.expirationMonth),
+            expirationYearIndex = findIndex(mapping.expirationYear),
+            securityCodeIndex = findIndex(mapping.securityCode)
         )
     }
 
@@ -259,6 +300,22 @@ class CsvImportParser @Inject constructor() {
             ?.name
             ?: CredentialType.PASSWORD.name
     }
+
+    private fun parseCardMonth(rawValue: String?): Int? {
+        val digits = rawValue.orEmpty().filter(Char::isDigit)
+        val month = digits.toIntOrNull() ?: return null
+        return month.takeIf { it in 1..12 }
+    }
+
+    private fun parseCardYear(rawValue: String?): Int? {
+        val digits = rawValue.orEmpty().filter(Char::isDigit)
+        return when (digits.length) {
+            0 -> null
+            2 -> 2000 + digits.toInt()
+            4 -> digits.toIntOrNull()
+            else -> null
+        }
+    }
 }
 
 /**
@@ -271,5 +328,10 @@ internal data class ResolvedColumns(
     val passwordIndex: Int,
     val notesIndex: Int?,
     val categoryIndex: Int?,
-    val credentialTypeIndex: Int?
+    val credentialTypeIndex: Int?,
+    val cardholderNameIndex: Int?,
+    val cardNumberIndex: Int?,
+    val expirationMonthIndex: Int?,
+    val expirationYearIndex: Int?,
+    val securityCodeIndex: Int?
 )

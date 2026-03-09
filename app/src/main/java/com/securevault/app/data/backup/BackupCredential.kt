@@ -1,5 +1,6 @@
 package com.securevault.app.data.backup
 
+import com.securevault.app.data.repository.model.CardData
 import com.securevault.app.data.repository.model.Credential
 import com.securevault.app.data.repository.model.CredentialType
 import com.securevault.app.data.repository.model.PasskeyData
@@ -15,6 +16,15 @@ data class BackupPasskeyData(
     val origin: String? = null,
     val signCount: Long = 0,
     val userDisplayName: String? = null
+)
+
+@Serializable
+data class BackupCardData(
+    val cardholderName: String? = null,
+    val cardNumber: String,
+    val expirationMonth: Int? = null,
+    val expirationYear: Int? = null,
+    val securityCode: String? = null
 )
 
 /**
@@ -46,7 +56,9 @@ data class BackupCredential(
     /** 認証情報の種類 */
     val credentialType: String = CredentialType.PASSWORD.name,
     /** パスキー固有データ */
-    val passkeyData: BackupPasskeyData? = null
+    val passkeyData: BackupPasskeyData? = null,
+    /** クレジットカード固有データ */
+    val cardData: BackupCardData? = null
 )
 
 /**
@@ -64,7 +76,8 @@ fun Credential.toBackup(): BackupCredential {
         createdAt = createdAt,
         updatedAt = updatedAt,
         credentialType = credentialType.name,
-        passkeyData = passkeyData?.toBackup()
+        passkeyData = passkeyData?.toBackup(),
+        cardData = cardData?.toBackup()
     )
 }
 
@@ -76,6 +89,7 @@ fun Credential.toBackup(): BackupCredential {
 fun BackupCredential.toCredential(): Credential {
     val resolvedType = CredentialType.values().firstOrNull { it.name == credentialType }
         ?: when {
+            cardData != null -> CredentialType.CARD
             passkeyData != null -> CredentialType.PASSKEY
             password.isNullOrBlank() -> CredentialType.ID_ONLY
             else -> CredentialType.PASSWORD
@@ -94,6 +108,7 @@ fun BackupCredential.toCredential(): Credential {
         updatedAt = updatedAt,
         isFavorite = isFavorite,
         passkeyData = passkeyData?.toDomain(),
+        cardData = cardData?.toDomain(),
         credentialType = resolvedType
     )
 }
@@ -121,5 +136,25 @@ private fun BackupPasskeyData.toDomain(): PasskeyData {
         origin = origin,
         signCount = signCount,
         userDisplayName = userDisplayName
+    )
+}
+
+private fun CardData.toBackup(): BackupCardData {
+    return BackupCardData(
+        cardholderName = cardholderName,
+        cardNumber = normalizedCardNumber,
+        expirationMonth = expirationMonth,
+        expirationYear = expirationYear,
+        securityCode = securityCode
+    )
+}
+
+private fun BackupCardData.toDomain(): CardData {
+    return CardData(
+        cardholderName = cardholderName,
+        cardNumber = cardNumber,
+        expirationMonth = expirationMonth,
+        expirationYear = expirationYear,
+        securityCode = securityCode
     )
 }
