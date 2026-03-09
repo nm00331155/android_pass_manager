@@ -189,13 +189,7 @@ fun SettingsScreen(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 OutlinedButton(
                     onClick = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Settings.ACTION_CREDENTIAL_PROVIDER).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                            )
-                        }.onFailure {
+                        if (!openCredentialProviderSettings(context)) {
                             coroutineScope.launch {
                                 snackbarHostState.showSnackbar(
                                     context.getString(R.string.settings_credential_provider_unavailable)
@@ -368,6 +362,51 @@ private fun isNotificationListenerEnabled(context: android.content.Context): Boo
     ).orEmpty()
 
     return enabledListeners.contains(context.packageName)
+}
+
+private fun openCredentialProviderSettings(context: android.content.Context): Boolean {
+    val packageUri = Uri.parse("package:${context.packageName}")
+    val intents = buildList {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            add(
+                Intent(Settings.ACTION_CREDENTIAL_PROVIDER).apply {
+                    data = packageUri
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }
+        add(
+            Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+        add(
+            Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE).apply {
+                data = packageUri
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+        add(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = packageUri
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+    }
+
+    intents.forEach { intent ->
+        if (intent.resolveActivity(context.packageManager) != null) {
+            val launched = runCatching {
+                context.startActivity(intent)
+                true
+            }.getOrDefault(false)
+            if (launched) {
+                return true
+            }
+        }
+    }
+
+    return false
 }
 
 private const val NOTIFICATION_LISTENER_SETTING_KEY = "enabled_notification_listeners"

@@ -35,7 +35,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -47,6 +51,13 @@ class KeyPassCredentialProviderService : CredentialProviderService() {
     @Inject
     lateinit var logger: AppLogger
 
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onDestroy() {
+        serviceScope.cancel()
+        super.onDestroy()
+    }
+
     override fun onBeginCreateCredentialRequest(
         request: BeginCreateCredentialRequest,
         cancellationSignal: CancellationSignal,
@@ -54,64 +65,75 @@ class KeyPassCredentialProviderService : CredentialProviderService() {
     ) {
         logger.d(TAG, "onBeginCreateCredentialRequest: type=${request::class.simpleName}")
 
-        val allCredentials = runCatching { runBlocking { credentialRepository.getAll().first() } }
-            .onFailure { throwable ->
-                logger.e(TAG, "onBeginCreateCredentialRequest: failed to load credential counts", throwable)
-            }
-            .getOrDefault(emptyList())
-        val passwordCount = allCredentials.count { it.hasPassword }
-        val passkeyCount = allCredentials.count { it.isPasskey }
-        val totalCount = allCredentials.size
+        cancellationSignal.setOnCancelListener {
+            logger.d(TAG, "onBeginCreateCredentialRequest: canceled")
+        }
 
-        val createEntries = when (request) {
-            is BeginCreatePasswordCredentialRequest -> {
-                listOf(
-                    createEntry(
-                        accountName = getString(R.string.app_name),
-                        description = getString(R.string.credential_type_password),
-                        flowType = CredentialProviderAuthActivity.FLOW_CREATE_PASSWORD,
-                        requestCode = FLOW_CREATE_PASSWORD_REQUEST_CODE,
-                        passwordCount = passwordCount,
-                        publicKeyCount = passkeyCount,
-                        totalCount = totalCount
-                    )
-                )
-            }
+        serviceScope.launch {
+            val allCredentials = runCatching { credentialRepository.getAll().first() }
+                .onFailure { throwable ->
+                    logger.e(TAG, "onBeginCreateCredentialRequest: failed to load credential counts", throwable)
+                }
+                .getOrDefault(emptyList())
+            val passwordCount = allCredentials.count { it.hasPassword }
+            val passkeyCount = allCredentials.count { it.isPasskey }
+            val totalCount = allCredentials.size
 
-            is BeginCreatePublicKeyCredentialRequest -> {
-                val requestInfo = runCatching {
-                    PasskeyWebAuthnHelper.parseCreateRequest(request.requestJson)
-                }.onFailure { throwable ->
-                    logger.w(TAG, "onBeginCreateCredentialRequest: failed to parse passkey request", throwable)
-                }.getOrNull()
-
-                if (requestInfo == null) {
-                    emptyList()
-                } else {
+            val createEntries = when (request) {
+                is BeginCreatePasswordCredentialRequest -> {
                     listOf(
                         createEntry(
-                            accountName = requestInfo.userName,
-                            description = requestInfo.rpName ?: requestInfo.rpId,
-                            flowType = CredentialProviderAuthActivity.FLOW_CREATE_PASSKEY,
-                            requestCode = FLOW_CREATE_PASSKEY_REQUEST_CODE,
+                            accountName = getString(R.string.app_name),
+                            description = getString(R.string.credential_type_password),
+                            flowType = CredentialProviderAuthActivity.FLOW_CREATE_PASSWORD,
+                            requestCode = FLOW_CREATE_PASSWORD_REQUEST_CODE,
                             passwordCount = passwordCount,
                             publicKeyCount = passkeyCount,
                             totalCount = totalCount
                         )
                     )
                 }
+
+                is BeginCreatePublicKeyCredentialRequest -> {
+                    val requestInfo = runCatching {
+                        PasskeyWebAuthnHelper.parseCreateRequest(request.requestJson)
+                    }.onFailure { throwable ->
+                        logger.w(TAG, "onBeginCreateCredentialRequest: failed to parse passkey request", throwable)
+                    }.getOrNull()
+
+                    if (requestInfo == null) {
+                        emptyList()
+                    } else {
+                        listOf(
+                            createEntry(
+                                accountName = requestInfo.userName,
+                                description = requestInfo.rpName ?: requestInfo.rpId,
+                                flowType = CredentialProviderAuthActivity.FLOW_CREATE_PASSKEY,
+                                requestCode = FLOW_CREATE_PASSKEY_REQUEST_CODE,
+                                passwordCount = passwordCount,
+                                publicKeyCount = passkeyCount,
+                                totalCount = totalCount
+                            )
+                        )
+                    }
+                }
+
+                else -> emptyList()
             }
 
-            else -> emptyList()
-        }
+            if (cancellationSignal.isCanceled) {
+                logger.d(TAG, "onBeginCreateCredentialRequest: skip result because request was canceled")
+                return@launch
+            }
 
-        if (createEntries.isEmpty()) {
-            logger.d(TAG, "onBeginCreateCredentialRequest: no create entries available")
-            callback.onError(CreateCredentialUnknownException())
-            return
-        }
+            if (createEntries.isEmpty()) {
+                logger.d(TAG, "onBeginCreateCredentialRequest: no create entries available")
+                callback.onError(CreateCredentialUnknownException())
+                return@launch
+            }
 
-        callback.onResult(BeginCreateCredentialResponse(createEntries, null))
+            callback.onResult(BeginCreateCredentialResponse(createEntries, null))
+        }
     }
 
     override fun onBeginGetCredentialRequest(
@@ -122,39 +144,52 @@ class KeyPassCredentialProviderService : CredentialProviderService() {
         val callingPackage = request.callingAppInfo?.packageName.orEmpty()
         logger.d(TAG, "onBeginGetCredentialRequest: callingPackage=$callingPackage")
 
-        try {
-            val credentialEntries = mutableListOf<CredentialEntry>()
+        cancellationSignal.setOnCancelListener {
+            logger.d(TAG, "onBeginGetCredentialRequest: canceled for package=$callingPackage")
+        }
 
-            for (option in request.beginGetCredentialOptions) {
-                when (option) {
-                    is BeginGetPasswordOption -> {
-                        credentialEntries += buildPasswordEntries(option, callingPackage)
-                    }
+        serviceScope.launch {
+            try {
+                val credentialEntries = mutableListOf<CredentialEntry>()
 
-                    is BeginGetPublicKeyCredentialOption -> {
-                        credentialEntries += buildPasskeyEntries(option)
-                    }
+                for (option in request.beginGetCredentialOptions) {
+                    when (option) {
+                        is BeginGetPasswordOption -> {
+                            credentialEntries += buildPasswordEntries(option, callingPackage)
+                        }
 
-                    else -> {
-                        logger.d(
-                            TAG,
-                            "onBeginGetCredentialRequest: unsupported option ${option::class.simpleName}"
-                        )
+                        is BeginGetPublicKeyCredentialOption -> {
+                            credentialEntries += buildPasskeyEntries(option)
+                        }
+
+                        else -> {
+                            logger.d(
+                                TAG,
+                                "onBeginGetCredentialRequest: unsupported option ${option::class.simpleName}"
+                            )
+                        }
                     }
                 }
-            }
 
-            val response = BeginGetCredentialResponse(
-                credentialEntries,
-                emptyList(),
-                emptyList(),
-                null
-            )
-            logger.d(TAG, "onBeginGetCredentialRequest: returning ${credentialEntries.size} entries")
-            callback.onResult(response)
-        } catch (e: Exception) {
-            logger.e(TAG, "onBeginGetCredentialRequest: error", e)
-            callback.onError(GetCredentialUnknownException())
+                if (cancellationSignal.isCanceled) {
+                    logger.d(TAG, "onBeginGetCredentialRequest: skip result because request was canceled")
+                    return@launch
+                }
+
+                val response = BeginGetCredentialResponse(
+                    credentialEntries,
+                    emptyList(),
+                    emptyList(),
+                    null
+                )
+                logger.d(TAG, "onBeginGetCredentialRequest: returning ${credentialEntries.size} entries")
+                callback.onResult(response)
+            } catch (e: Exception) {
+                logger.e(TAG, "onBeginGetCredentialRequest: error", e)
+                if (!cancellationSignal.isCanceled) {
+                    callback.onError(GetCredentialUnknownException())
+                }
+            }
         }
     }
 
@@ -189,12 +224,12 @@ class KeyPassCredentialProviderService : CredentialProviderService() {
         )
     }
 
-    private fun buildPasswordEntries(
+    private suspend fun buildPasswordEntries(
         option: BeginGetPasswordOption,
         callingPackage: String
     ): List<PasswordCredentialEntry> {
         logger.d(TAG, "onBeginGetCredentialRequest: BeginGetPasswordOption")
-        val credentials = runBlocking { selectPasswordCredentials(callingPackage) }
+        val credentials = selectPasswordCredentials(callingPackage)
         logger.d(TAG, "onBeginGetCredentialRequest: found ${credentials.size} password credentials")
 
         return credentials.take(MAX_ENTRIES).mapNotNull { credential ->
@@ -225,7 +260,7 @@ class KeyPassCredentialProviderService : CredentialProviderService() {
         }
     }
 
-    private fun buildPasskeyEntries(
+    private suspend fun buildPasskeyEntries(
         option: BeginGetPublicKeyCredentialOption
     ): List<PublicKeyCredentialEntry> {
         logger.d(TAG, "onBeginGetCredentialRequest: BeginGetPublicKeyCredentialOption")
@@ -235,20 +270,18 @@ class KeyPassCredentialProviderService : CredentialProviderService() {
             logger.w(TAG, "onBeginGetCredentialRequest: failed to parse passkey option", throwable)
         }.getOrNull() ?: return emptyList()
 
-        val credentials = runBlocking {
-            credentialRepository.getAll().first()
-                .asSequence()
-                .filter { credential ->
-                    credential.isPasskey && credential.passkeyData?.rpId.equals(requestInfo.rpId, ignoreCase = true)
-                }
-                .filter { credential ->
-                    requestInfo.allowedCredentialIds.isEmpty() ||
-                        requestInfo.allowedCredentialIds.contains(credential.passkeyData?.credentialId)
-                }
-                .sortedByDescending { it.updatedAt }
-                .take(MAX_ENTRIES)
-                .toList()
-        }
+        val credentials = credentialRepository.getAll().first()
+            .asSequence()
+            .filter { credential ->
+                credential.isPasskey && credential.passkeyData?.rpId.equals(requestInfo.rpId, ignoreCase = true)
+            }
+            .filter { credential ->
+                requestInfo.allowedCredentialIds.isEmpty() ||
+                    requestInfo.allowedCredentialIds.contains(credential.passkeyData?.credentialId)
+            }
+            .sortedByDescending { it.updatedAt }
+            .take(MAX_ENTRIES)
+            .toList()
         logger.d(TAG, "onBeginGetCredentialRequest: found ${credentials.size} passkeys")
 
         return credentials.mapNotNull { credential ->

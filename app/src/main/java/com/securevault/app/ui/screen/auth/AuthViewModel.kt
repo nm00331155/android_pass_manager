@@ -78,10 +78,6 @@ class AuthViewModel @Inject constructor(
      * 認証画面表示時に前回の認証状態を持ち越さないよう初期化する。
      */
     fun prepareForEntry() {
-        if (authState.value is AuthUiState.Authenticating) {
-            return
-        }
-
         biometricAuthManager.resetState()
         clearError()
     }

@@ -1,6 +1,6 @@
 # SecureVault 仕様書
 
-最終更新: 2026-03-08 20:00:28 +09:00
+最終更新: 2026-03-09 22:43:30 +09:00
 
 ## 1. アプリ概要
 - アプリ名: SecureVault（Android パスワードマネージャー）
@@ -74,6 +74,7 @@
   - 実装済み: `BiometricAuthManager` は認証成功を `() -> Unit` で通知し、CryptoObject に依存しない設計へ更新
   - 実装済み: `AuthScreen` 認証連携、`NavGraph` ロック時遷移ガード
   - 実装済み: 設定画面からの自動ロック秒数変更連携、認証失敗UXリトライ導線
+  - 実装済み: `AuthScreen` 再入時とフォアグラウンド復帰時に stale な認証状態を初期化し、Autofill / Credential Provider から戻った後の認証画面フリーズを回避
   - 実装済み: `CryptoEngineTest`（1件、成功）
 - Phase 2: 完了
   - 実装済み: `CredentialEntity`, `CredentialDao`, `SecureVaultDatabase`
@@ -86,6 +87,7 @@
   - 実装済み: `DetailScreen` + `DetailViewModel`（コピー/削除/表示切替）
   - 実装済み: `PasswordGeneratorScreen` + `PasswordGeneratorViewModel`
   - 実装済み: `SettingsScreen` + `SettingsViewModel`（自動ロック/クリップボード設定、全件削除）
+  - 実装済み: `SettingsScreen` のプロバイダ管理導線を package URI 付き `ACTION_CREDENTIAL_PROVIDER` + 既定アプリ/Autofill/app details への段階フォールバックに更新
   - 実装済み: `NavGraph` の生成パスワード受け渡し導線
 - Phase 4: 完了
   - 実装済み: `SecureVaultAutofillService` の Repository 連携と FillResponse 生成
@@ -100,14 +102,17 @@
   - 実装済み: `buildFillResponse` の credentials Dataset 構築を Android 公式サンプル準拠へ変更（`Dataset.Builder()` + `setValue(id, value, presentation)`）
   - 実装済み: 自動入力候補UI検証のため、認証ゲート（`setAuthentication`）を一時無効化して直接値入力へ変更
   - 実装済み: ドロップダウン表示安定化検証として presentation を `android.R.layout.simple_list_item_1` / `android.R.id.text1` に統一（OTP Dataset 含む）
-  - 実装済み: `onFillRequest` を同期レスポンス方式へ変更（`runBlocking(Dispatchers.IO)` で解決 -> `callback.onSuccess` を同スレッドで返却）
+  - 実装済み: `onFillRequest` は `serviceScope.launch` ベースの非同期解決へ変更し、AssistStructure 解析・credential 復号・候補生成をメインスレッド外で行う
+  - 実装済み: `KeyPassCredentialProviderService` の password/passkey create/get もバックグラウンド coroutine で候補生成し、`runBlocking` を除去
   - 実装済み: `KeyPassCredentialProviderService` で空ユーザー名 credential をスキップし、`PasswordCredentialEntry` 生成失敗を個別 try-catch で隔離
   - 実装済み: `buildFillResponse` の username/password presentation を `R.layout.autofill_suggestion_item` に復帰
   - 実装済み: `AutofillCredentialMatcher` を追加し、`packageName` / URL / ドメイン / サービス名断片 / アプリ表示名を横断スコアリングして高信頼一致のみ返却
   - 実装済み: 汎用フォールバック一覧を廃止し、対象アプリ/対象ドメインと関係ない候補を表示しない構成へ変更
   - 実装済み: `SmartFieldDetector` の日本語キーワードを拡張し、ログインID / メール / パスワード / 認証コード系フィールド検出を強化
+  - 実装済み: `SmartFieldDetector` の全ノード verbose ログを既定無効化し、巨大 DOM/AssistStructure 走査時の ANR リスクを低減
   - 実装済み: `AssistStructure.WindowNode.title` を収集し、ブラウザで `webDomain` が取れない場合でも page title を照合ラベルとして利用
   - 実装済み: `buildFillResponse` を認証ゲート付き Dataset に戻し、候補選択後に `AutofillAuthActivity` の生体認証を通してから自動入力するフローへ復帰
+  - 実装済み: Chromium 系ブラウザ（Chrome / Brave / Edge / Vivaldi）では response-level auth を使わず dataset-auth を優先し、候補表示後に値が挿入されないケースを回避
   - 実装済み: 認証成功時に `packageName` / `webDomain` の未保存関連付けを学習し、次回以降の一致精度を改善
 - Phase 5: 完了
   - 実装済み: `strings.xml` の全面日本語化（指定文言へ置換）

@@ -1,6 +1,6 @@
 # 作業状況
 
-最終更新: 2026-03-09 17:17:49 +09:00
+最終更新: 2026-03-09 22:43:30 +09:00
 
 ## 現在のフェーズ
 - Phase 1〜6: 全完了
@@ -30,6 +30,38 @@
 - クレジットカード有効期限の Autofill はサイト実装差（`MM/YY` / `MM/YYYY` / month-year 分離）に依存するため、実サイトごとに最終 QA が必要
 
 ## 本セッションで完了した作業
+- Autofill / passkey provider の回帰 ANR を調査し、サービス実行を非同期化
+  - 調査結果: `adb logcat` で `Timeout executing service: ServiceRecord{...SecureVaultAutofillService}` と `ANR in com.securevault.app` を確認。`dumpsys autofill` では SecureVault 自体は既定 Autofill service のままで、登録解除やクラッシュではなく service 実行ブロックが主因と判明
+  - 調査結果: `SecureVaultAutofillService.kt` の `onFillRequest` と `KeyPassCredentialProviderService.kt` の create/get request がメインプロセス上で同期的に credential 解決・復号を行っており、Samsung 端末での長時間待ちと相性が悪かった
+  - 改修: `SecureVaultAutofillService.kt` の `onFillRequest` を `serviceScope.launch` ベースの非同期処理へ変更し、`CancellationSignal` を見ながら `FillCallback` を返すよう更新
+  - 改修: `KeyPassCredentialProviderService.kt` の `onBeginCreateCredentialRequest` / `onBeginGetCredentialRequest` をバックグラウンド coroutine 化し、`runBlocking` を除去
+  - 改修: `SmartFieldDetector.kt` の全ノード verbose ログを既定無効化し、巨大な `AssistStructure` を走査する際の logcat/buffer 負荷を抑制
+  - 検証: `./gradlew.bat :app:assembleDebug :app:testDebugUnitTest` 成功、72 件の unit test 成功
+  - 実機反映: `install_debug.bat` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-09 22:42:29`
+  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-09 22:42:01`、`Length=111062901`）
+  - 追加確認: `adb logcat -c` 後にアプリを再起動し、直後の新規ログに `SecureVaultAutofillService` / `KeyPassCredentialProviderService` の ANR 行が出ていないことを確認
+  - スクリーンショット: `docs/screenshots/securevault_anr_fix_20260309_2242.png` を取得（`LastWriteTime=2026-03-09 22:42:58`、`Length=54330`）
+  - 注意: 実サイト上での Autofill / passkey get-create の完全再現までは自動化しておらず、ブラウザ実地 QA は継続して必要
+
+- Autofill ダイアログ視認性、Chrome 挿入不良、provider 管理導線を追加修正
+  - 改修: `ConfirmDialog.kt` の否定ボタン色をテーマ依存の `onSurface` 任せにせず、dialog surface の輝度に応じて黒/白を明示適用するよう変更。白背景系テーマでも `いいえ` が白文字のまま残らないよう修正
+  - 改修: `SecureVaultAutofillService.kt` の response-level authentication 判定を更新し、Chromium 系ブラウザでは単一 credential 時でも dataset-auth を使うよう変更。候補 UI は出るが認証後に Chrome へ値が入らない経路を回避
+  - 改修: `SettingsScreen.kt` の provider 管理導線を更新し、`ACTION_CREDENTIAL_PROVIDER` に `package:<app>` URI を付与。加えて未対応端末向けに Default apps -> Autofill service -> app details の順でフォールバックするよう変更
+  - 検証: `./gradlew.bat :app:assembleDebug :app:testDebugUnitTest` 成功、72 件の unit test 成功
+  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-09 22:12:37`、`Length=111062901`）
+  - 実機反映: `install_debug.bat` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-09 22:14:08`
+  - 実機確認: `adb shell am start -W -a android.settings.CREDENTIAL_PROVIDER -d package:com.securevault.app` で `com.android.settings/.Settings$PasswordsAndAutofillPickerActivity` が起動し、`KeyPass` と `Samsung Pass` の provider 一覧表示を確認
+  - スクリーンショット: `docs/screenshots/securevault_provider_settings_20260309_2220.png`、`docs/screenshots/securevault_post_fix_20260309_2215.png` を取得
+
+- Autofill / Credential Provider からアプリへ戻った後に認証画面が固まる不具合を修正
+  - 調査結果: `BiometricAuthManager` の `AuthUiState.Authenticating` が残留したまま `AuthScreen` に復帰すると、`prepareForEntry()` が状態をリセットせず、認証ボタンも無効化されたままになり再操作不能になっていた
+  - 改修: `AuthViewModel.kt` の `prepareForEntry()` から `Authenticating` 時の早期 return を削除し、再入時は常に認証状態を初期化するよう変更
+  - 改修: `AuthScreen.kt` に lifecycle observer を追加し、フォアグラウンド復帰時 (`ON_START`) に `autoPromptAttempted` と認証状態を再初期化するよう変更
+  - 検証: `./gradlew.bat :app:assembleDebug :app:testDebugUnitTest` 成功、72 件の unit test 成功
+  - 実機反映: `install_debug.bat` で再導入成功。途中で署名不一致により既存アプリを `adb uninstall com.securevault.app` してから再インストール
+  - 端末反映: `lastUpdateTime=2026-03-09 21:53:33`
+  - スクリーンショット: `docs/screenshots/securevault_auth_resume_fix_20260309.png` を取得
+
 - 認証画面と Autofill UI の追加調整
   - 改修: `AuthScreen.kt`, `AuthViewModel.kt` を更新し、起動直後の認証画面で自動的に認証ダイアログを起動するよう変更。起動ロゴで止まって見える状態を減らし、手動ボタンはリトライ用途として維持
   - 改修: `AuthScreen.kt`, `AuthViewModel.kt`, `NavGraph.kt` を追加更新し、認証画面への再入時に前回の `AuthUiState` を初期化、`autoPromptAttempted` を saveable ではなく画面単位 state に変更、未ロック時は `Auth` に留まらず `Home` へ遷移するよう修正

@@ -46,7 +46,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 /**
@@ -107,98 +106,113 @@ class SecureVaultAutofillService : AutofillService() {
             return
         }
 
-        val focusedId = request.fillContexts.lastOrNull()?.focusedId
-        val targets = smartFieldDetector.detect(structure, focusedId)
-        val contentType = determineContentType(targets)
-        val currentFieldValues = extractTargetFieldValues(structure, targets)
-        // Chromium 137+ のブラウザ設定案内を初回のみ表示する。
-        showBrowserSettingsGuideIfNeeded(targetPackageName)
-        logger.d(
-            TAG,
-            "onFillRequest: detected focusedId=${targets.focusedId}, focusedSupportsTrigger=${targets.focusedNodeInfo?.supportsAutofillTrigger}, contentType=$contentType, usernameId=${targets.usernameId}, passwordId=${targets.passwordId}, cardholderNameId=${targets.cardholderNameId}, cardNumberId=${targets.cardNumberId}, cardExpirationDateId=${targets.cardExpirationDateId}, cardExpirationMonthId=${targets.cardExpirationMonthId}, cardExpirationYearId=${targets.cardExpirationYearId}, cardSecurityCodeId=${targets.cardSecurityCodeId}, otpId=${targets.otpId}, webDomain=${targets.webDomain}, pageTitle=${targets.pageTitle}"
-        )
-
-        if (contentType == null && targets.otpId == null) {
-            logger.d(TAG, "onFillRequest: no fields detected")
-            callback.onSuccess(null)
-            return
-        }
-
-        if (contentType != null && shouldSuppressAutofillForFilledFields(contentType, targets, currentFieldValues)) {
-            logger.d(TAG, "onFillRequest: skipping because detected fields are already filled for contentType=$contentType")
-            callback.onSuccess(null)
-            return
-        }
-
         val inlineRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             request.inlineSuggestionsRequest
         } else {
             null
         }
 
-        try {
-            if (targets.otpId != null) {
-                runCatching {
-                    runBlocking(Dispatchers.IO) {
-                        smsOtpManager.startListening()
-                    }
-                }.onFailure { throwable ->
-                    logger.w(TAG, "Failed to start SMS OTP listener", throwable)
-                }
-            }
+        cancellationSignal.setOnCancelListener {
+            logger.d(TAG, "onFillRequest: cancellation requested for package=$targetPackageName")
+        }
 
-            val credentials = if (contentType != null) {
-                runBlocking(Dispatchers.IO) {
+        serviceScope.launch {
+            try {
+                val focusedId = request.fillContexts.lastOrNull()?.focusedId
+                val targets = smartFieldDetector.detect(structure, focusedId)
+                val contentType = determineContentType(targets)
+                val currentFieldValues = extractTargetFieldValues(structure, targets)
+
+                // Chromium 137+ のブラウザ設定案内を初回のみ表示する。
+                showBrowserSettingsGuideIfNeeded(targetPackageName)
+                logger.d(
+                    TAG,
+                    "onFillRequest: detected focusedId=${targets.focusedId}, focusedSupportsTrigger=${targets.focusedNodeInfo?.supportsAutofillTrigger}, contentType=$contentType, usernameId=${targets.usernameId}, passwordId=${targets.passwordId}, cardholderNameId=${targets.cardholderNameId}, cardNumberId=${targets.cardNumberId}, cardExpirationDateId=${targets.cardExpirationDateId}, cardExpirationMonthId=${targets.cardExpirationMonthId}, cardExpirationYearId=${targets.cardExpirationYearId}, cardSecurityCodeId=${targets.cardSecurityCodeId}, otpId=${targets.otpId}, webDomain=${targets.webDomain}, pageTitle=${targets.pageTitle}"
+                )
+
+                if (contentType == null && targets.otpId == null) {
+                    logger.d(TAG, "onFillRequest: no fields detected")
+                    deliverFillResponse(callback, cancellationSignal, null)
+                    return@launch
+                }
+
+                if (contentType != null && shouldSuppressAutofillForFilledFields(contentType, targets, currentFieldValues)) {
+                    logger.d(TAG, "onFillRequest: skipping because detected fields are already filled for contentType=$contentType")
+                    deliverFillResponse(callback, cancellationSignal, null)
+                    return@launch
+                }
+
+                if (targets.otpId != null) {
+                    runCatching {
+                        smsOtpManager.startListening()
+                    }.onFailure { throwable ->
+                        logger.w(TAG, "Failed to start SMS OTP listener", throwable)
+                    }
+                }
+
+                val credentials = if (contentType != null) {
                     runCatching {
                         filterAutofillableCredentials(
                             resolveCredentials(targetPackageName, targets.webDomain),
                             contentType
                         ).ifEmpty {
-                                if (!targets.pageTitle.isNullOrBlank()) {
-                                    filterAutofillableCredentials(
-                                        resolveCredentials(
-                                            targetPackageName,
-                                            targets.webDomain,
-                                            targets.pageTitle
-                                        ),
-                                        contentType
-                                    )
-                                } else {
-                                    emptyList()
-                                }
+                            if (!targets.pageTitle.isNullOrBlank()) {
+                                filterAutofillableCredentials(
+                                    resolveCredentials(
+                                        targetPackageName,
+                                        targets.webDomain,
+                                        targets.pageTitle
+                                    ),
+                                    contentType
+                                )
+                            } else {
+                                emptyList()
                             }
+                        }
                     }.getOrElse { throwable ->
                         logger.e(TAG, "Failed to resolve autofill credentials", throwable)
                         emptyList()
                     }
+                } else {
+                    emptyList()
                 }
-            } else {
-                emptyList()
-            }
 
-            logger.d(TAG, "onFillRequest: resolved ${credentials.size} credentials")
-            credentials.forEachIndexed { index, credential ->
-                logger.d(
-                    TAG,
-                    "onFillRequest: credential[$index] id=${credential.id}, service=${credential.serviceName}, user=${credential.username}"
+                logger.d(TAG, "onFillRequest: resolved ${credentials.size} credentials")
+                credentials.forEachIndexed { index, credential ->
+                    logger.d(
+                        TAG,
+                        "onFillRequest: credential[$index] id=${credential.id}, service=${credential.serviceName}, user=${credential.username}"
+                    )
+                }
+
+                val response = buildFillResponse(
+                    targetPackageName = targetPackageName,
+                    targets = targets,
+                    credentials = credentials,
+                    inlineRequest = inlineRequest,
+                    contentType = contentType
                 )
+                logger.d(TAG, "onFillRequest: responseBuilt=${response != null}")
+
+                deliverFillResponse(callback, cancellationSignal, response)
+                logger.d(TAG, "=== onFillRequest END (success) ===")
+            } catch (throwable: Throwable) {
+                logger.e(TAG, "onFillRequest: exception", throwable)
+                deliverFillResponse(callback, cancellationSignal, null)
             }
-
-            val response = buildFillResponse(
-                targetPackageName = targetPackageName,
-                targets = targets,
-                credentials = credentials,
-                inlineRequest = inlineRequest,
-                contentType = contentType
-            )
-            logger.d(TAG, "onFillRequest: responseBuilt=${response != null}")
-
-            callback.onSuccess(response)
-            logger.d(TAG, "=== onFillRequest END (success) ===")
-        } catch (throwable: Throwable) {
-            logger.e(TAG, "onFillRequest: exception", throwable)
-            callback.onSuccess(null)
         }
+    }
+
+    private fun deliverFillResponse(
+        callback: FillCallback,
+        cancellationSignal: CancellationSignal,
+        response: FillResponse?
+    ) {
+        if (cancellationSignal.isCanceled) {
+            logger.d(TAG, "deliverFillResponse: skipped because request was canceled")
+            return
+        }
+        callback.onSuccess(response)
     }
 
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
@@ -478,7 +492,7 @@ class SecureVaultAutofillService : AutofillService() {
             )
         }
 
-        if (shouldUseResponseAuthentication(credentials, targets, contentType)) {
+        if (shouldUseResponseAuthentication(targetPackageName, credentials, targets, contentType)) {
             val responseAuthResult = buildResponseAuthenticationFillResponse(
                 targetPackageName = targetPackageName,
                 targets = targets,
@@ -645,6 +659,7 @@ class SecureVaultAutofillService : AutofillService() {
     }
 
     private fun shouldUseResponseAuthentication(
+        targetPackageName: String,
         credentials: List<Credential>,
         targets: SmartFieldDetector.DetectedFields,
         contentType: AutofillContentType?
@@ -654,6 +669,13 @@ class SecureVaultAutofillService : AutofillService() {
             return false
         }
         if (!credential.hasPassword) {
+            return false
+        }
+        if (targetPackageName in CHROMIUM_BROWSER_PACKAGES) {
+            logger.d(
+                TAG,
+                "shouldUseResponseAuthentication: disabled for chromium browser package=$targetPackageName"
+            )
             return false
         }
 

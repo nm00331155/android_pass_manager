@@ -8,6 +8,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
 /**
@@ -23,8 +25,12 @@ fun ConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val dismissTextColor = if (surfaceColor.luminance() > 0.5f) Color.Black else Color.White
+
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = surfaceColor,
         title = { Text(text = title) },
         text = { Text(text = message) },
         confirmButton = {
@@ -42,10 +48,10 @@ fun ConfirmDialog(
                 onClick = onDismiss,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    contentColor = dismissTextColor
                 )
             ) {
-                Text(text = dismissText)
+                Text(text = dismissText, color = dismissTextColor)
             }
         }
     )

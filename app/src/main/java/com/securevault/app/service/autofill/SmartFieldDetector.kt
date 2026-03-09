@@ -56,10 +56,12 @@ class SmartFieldDetector @Inject constructor(
             val nodeText = node.text?.toString()?.lowercase(Locale.ROOT).orEmpty()
             val htmlTokens = readHtmlTokens(node)
 
-            logger.d(
-                TAG,
-                "detect node: hints=$hints, id=$idEntry, hint=${node.hint.orEmpty()}, inputType=${node.inputType}"
-            )
+            if (VERBOSE_NODE_LOGGING) {
+                logger.d(
+                    TAG,
+                    "detect node: hints=$hints, id=$idEntry, hint=${node.hint.orEmpty()}, inputType=${node.inputType}"
+                )
+            }
 
             if (focusedNodeInfo == null && node.autofillId == focusedId) {
                 focusedNodeInfo = createFocusedNodeInfo(
@@ -641,6 +643,7 @@ class SmartFieldDetector @Inject constructor(
 
     private companion object {
         const val TAG = "SmartFieldDetector"
+        const val VERBOSE_NODE_LOGGING = false
         const val OTP_MIN_LENGTH = 4
         const val OTP_MAX_LENGTH = 8
 

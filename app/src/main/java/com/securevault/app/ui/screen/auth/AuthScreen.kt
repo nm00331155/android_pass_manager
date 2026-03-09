@@ -12,6 +12,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.securevault.app.R
 import com.securevault.app.biometric.AuthUiState
 import com.securevault.app.util.findFragmentActivity
@@ -39,6 +43,7 @@ fun AuthScreen(
     var autoPromptAttempted by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = remember(context) { context.findFragmentActivity() }
+    val lifecycleOwner = LocalLifecycleOwner.current
     val authAvailability = remember(context) { viewModel.getAuthAvailability(context) }
     val authAvailable = authAvailability.isAvailable
 
@@ -69,6 +74,19 @@ fun AuthScreen(
     LaunchedEffect(activity) {
         autoPromptAttempted = false
         viewModel.prepareForEntry()
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                autoPromptAttempted = false
+                viewModel.prepareForEntry()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     LaunchedEffect(authAvailable, activity, authState, autoPromptAttempted) {
