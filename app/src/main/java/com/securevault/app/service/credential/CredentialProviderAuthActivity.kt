@@ -269,6 +269,11 @@ class CredentialProviderAuthActivity : FragmentActivity() {
             return
         }
 
+        logger.d(
+            TAG,
+            "Creating passkey credential: package=${callingAppInfo.packageName}, origin=$origin, rpId=${requestInfo.rpId}, user=${requestInfo.userName}, clientDataHashPresent=${request.clientDataHash != null}"
+        )
+
         val registrationResult = runCatching {
             PasskeyWebAuthnHelper.createRegistrationResponse(
                 requestJson = request.requestJson,
@@ -344,28 +349,33 @@ class CredentialProviderAuthActivity : FragmentActivity() {
             return null
         }
 
-        return computeAndroidFacetOrigin(callingAppInfo.packageName)
+        return computeAndroidFacetOrigin(callingAppInfo)
     }
 
-    private fun computeAndroidFacetOrigin(packageName: String): String? {
-        val signatureBytes = runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                packageManager.getPackageInfo(
-                    packageName,
-                    PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong())
-                ).signingInfo?.apkContentsSigners?.firstOrNull()?.toByteArray()
-            } else {
-                @Suppress("DEPRECATION")
-                packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
-                    .signatures?.firstOrNull()?.toByteArray()
-            }
-        }.onFailure { throwable ->
-            logger.w(TAG, "Failed to resolve package signature for $packageName", throwable)
-        }.getOrNull() ?: return null
+    private fun computeAndroidFacetOrigin(callingAppInfo: CallingAppInfo): String? {
+        val signatureBytes = resolveCallingSignatureBytes(callingAppInfo) ?: return null
 
         val certificateDigest = MessageDigest.getInstance(HASH_ALGORITHM)
             .digest(signatureBytes)
         return ANDROID_ORIGIN_PREFIX + PasskeyWebAuthnHelper.encodeBase64Url(certificateDigest)
+    }
+
+    private fun resolveCallingSignatureBytes(callingAppInfo: CallingAppInfo): ByteArray? {
+        val signingInfoCompat = runCatching {
+            callingAppInfo.signingInfoCompat
+        }.onFailure { throwable ->
+            logger.w(TAG, "Failed to read calling app signing info for ${callingAppInfo.packageName}", throwable)
+        }.getOrNull() ?: return null
+
+        val signature = signingInfoCompat.apkContentsSigners.firstOrNull()
+            ?: signingInfoCompat.signingCertificateHistory.firstOrNull()
+
+        if (signature == null) {
+            logger.w(TAG, "No signing certificates available for ${callingAppInfo.packageName}")
+            return null
+        }
+
+        return signature.toByteArray()
     }
 
     private fun resolveApplicationLabel(packageName: String): String? {

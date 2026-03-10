@@ -49,6 +49,8 @@ import com.securevault.app.R
 import com.securevault.app.data.backup.CsvImportParser
 import com.securevault.app.data.backup.ImportSource
 import com.securevault.app.data.backup.ImportStrategy
+import com.securevault.app.ui.component.DialogConfirmButton
+import com.securevault.app.ui.component.DialogDismissButton
 
 private enum class ImportRequestType {
     ENCRYPTED,
@@ -314,7 +316,8 @@ fun BackupScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                DialogConfirmButton(
+                    text = stringResource(android.R.string.ok),
                     onClick = {
                         if (exportPassword != exportPasswordConfirm) {
                             passwordMismatchError = true
@@ -329,21 +332,18 @@ fun BackupScreen(
                         }
                     },
                     enabled = exportPassword.isNotEmpty()
-                ) {
-                    Text(stringResource(android.R.string.ok))
-                }
+                )
             },
             dismissButton = {
-                TextButton(
+                DialogDismissButton(
+                    text = stringResource(android.R.string.cancel),
                     onClick = {
                         showExportPasswordDialog = false
                         exportPassword = ""
                         exportPasswordConfirm = ""
                         passwordMismatchError = false
                     }
-                ) {
-                    Text(stringResource(android.R.string.cancel))
-                }
+                )
             }
         )
     }
@@ -366,7 +366,8 @@ fun BackupScreen(
                 )
             },
             confirmButton = {
-                TextButton(
+                DialogConfirmButton(
+                    text = stringResource(android.R.string.ok),
                     onClick = {
                         if (importPassword.isNotEmpty()) {
                             importRequestType = ImportRequestType.ENCRYPTED
@@ -375,19 +376,16 @@ fun BackupScreen(
                         }
                     },
                     enabled = importPassword.isNotEmpty()
-                ) {
-                    Text(stringResource(android.R.string.ok))
-                }
+                )
             },
             dismissButton = {
-                TextButton(
+                DialogDismissButton(
+                    text = stringResource(android.R.string.cancel),
                     onClick = {
                         showImportPasswordDialog = false
                         importPassword = ""
                     }
-                ) {
-                    Text(stringResource(android.R.string.cancel))
-                }
+                )
             }
         )
     }
@@ -423,7 +421,8 @@ fun BackupScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                DialogConfirmButton(
+                    text = stringResource(android.R.string.ok),
                     onClick = {
                         when (importRequestType) {
                             ImportRequestType.ENCRYPTED -> {
@@ -445,19 +444,16 @@ fun BackupScreen(
                         showStrategyDialog = false
                         importPassword = ""
                     }
-                ) {
-                    Text(stringResource(android.R.string.ok))
-                }
+                )
             },
             dismissButton = {
-                TextButton(
+                DialogDismissButton(
+                    text = stringResource(android.R.string.cancel),
                     onClick = {
                         showStrategyDialog = false
                         importPassword = ""
                     }
-                ) {
-                    Text(stringResource(android.R.string.cancel))
-                }
+                )
             }
         )
     }
@@ -491,21 +487,21 @@ fun BackupScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                DialogConfirmButton(
+                    text = stringResource(android.R.string.ok),
                     onClick = {
                         showServiceSourceDialog = false
                         serviceImportLauncher.launch(
                             arrayOf("text/csv", "text/comma-separated-values", "*/*")
                         )
                     }
-                ) {
-                    Text(stringResource(android.R.string.ok))
-                }
+                )
             },
             dismissButton = {
-                TextButton(onClick = { showServiceSourceDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
+                DialogDismissButton(
+                    text = stringResource(android.R.string.cancel),
+                    onClick = { showServiceSourceDialog = false }
+                )
             }
         )
     }
@@ -516,19 +512,19 @@ fun BackupScreen(
             title = { Text(stringResource(R.string.backup_export_csv)) },
             text = { Text(stringResource(R.string.backup_export_csv_warning)) },
             confirmButton = {
-                TextButton(
+                DialogConfirmButton(
+                    text = stringResource(android.R.string.ok),
                     onClick = {
                         showCsvWarningDialog = false
                         csvExportLauncher.launch("securevault_export.csv")
                     }
-                ) {
-                    Text(stringResource(android.R.string.ok))
-                }
+                )
             },
             dismissButton = {
-                TextButton(onClick = { showCsvWarningDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
+                DialogDismissButton(
+                    text = stringResource(android.R.string.cancel),
+                    onClick = { showCsvWarningDialog = false }
+                )
             }
         )
     }

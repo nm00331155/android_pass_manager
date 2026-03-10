@@ -152,7 +152,10 @@ class SecureVaultAutofillService : AutofillService() {
                 }
 
                 if (contentType != null && shouldSuppressAutofillForFilledFields(contentType, targets, currentFieldValues)) {
-                    logger.d(TAG, "onFillRequest: skipping because detected fields are already filled for contentType=$contentType")
+                    logger.d(
+                        TAG,
+                        "onFillRequest: skipping because ${describeFilledFieldSuppression(contentType, targets, currentFieldValues)}"
+                    )
                     deliverFillResponse(callback, cancellationSignal, null)
                     return@launch
                 }
@@ -482,7 +485,21 @@ class SecureVaultAutofillService : AutofillService() {
             "buildFillResponse: inlineRequest=${inlineRequest != null}, specsCount=${inlineRequest?.inlinePresentationSpecs?.size ?: 0}, maxSuggestionCount=${if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) inlineRequest?.maxSuggestionCount else null}"
         )
 
-        val saveInfo = createSaveInfo(targets, contentType)
+        val rawSaveInfo = createSaveInfo(targets, contentType)
+        val saveInfo = if (
+            rawSaveInfo != null &&
+            contentType == AutofillContentType.LOGIN &&
+            credentials.isNotEmpty() &&
+            isCompatProxyFocusedId(targets)
+        ) {
+            logger.d(
+                TAG,
+                "buildFillResponse: suppressing saveInfo for compat proxy focusedId=${targets.focusedId} while datasets exist to avoid Chromium session dismissal"
+            )
+            null
+        } else {
+            rawSaveInfo
+        }
         val shouldOfferOtp = shouldOfferOtpDataset(targets) && allowedOtpSources.isNotEmpty()
         if (credentials.isEmpty() && saveInfo == null && !shouldOfferOtp) {
             logger.d(TAG, "buildFillResponse: no dataset and no saveInfo")
@@ -990,6 +1007,11 @@ class SecureVaultAutofillService : AutofillService() {
         return true
     }
 
+    private fun isCompatProxyFocusedId(targets: SmartFieldDetector.DetectedFields): Boolean {
+        val focusedId = targets.focusedId ?: return false
+        return focusedId !in targets.allAutofillIds
+    }
+
     private fun shouldAllowFocusedTrigger(targets: SmartFieldDetector.DetectedFields): Boolean {
         val focusedId = targets.focusedId ?: return false
         if (
@@ -1005,10 +1027,9 @@ class SecureVaultAutofillService : AutofillService() {
             return focusedNodeInfo.supportsAutofillTrigger
         }
 
-        val isCompatProxyId = focusedId !in targets.allAutofillIds
         val hasCredentialTargets =
             targets.usernameId != null || targets.passwordId != null || hasCardTargets(targets)
-        if (isCompatProxyId && hasCredentialTargets) {
+        if (isCompatProxyFocusedId(targets) && hasCredentialTargets) {
             logger.d(
                 TAG,
                 "buildFillResponse: allowing compat-mode proxy trigger focusedId=$focusedId because it is absent from AssistStructure nodes"
@@ -1083,7 +1104,7 @@ class SecureVaultAutofillService : AutofillService() {
     ): SaveInfo? {
         val requiredIds = when (contentType) {
             AutofillContentType.CARD -> listOfNotNull(targets.cardNumberId).distinct()
-            AutofillContentType.LOGIN -> listOfNotNull(targets.usernameId).distinct()
+            AutofillContentType.LOGIN -> listOfNotNull(targets.usernameId ?: targets.passwordId).distinct()
             null -> emptyList()
         }
         val optionalIds = when (contentType) {
@@ -1095,21 +1116,28 @@ class SecureVaultAutofillService : AutofillService() {
                 targets.cardSecurityCodeId
             ).filterNot { it in requiredIds }
 
-            AutofillContentType.LOGIN -> listOfNotNull(targets.passwordId)
+            AutofillContentType.LOGIN -> listOfNotNull(targets.usernameId, targets.passwordId)
+                .distinct()
                 .filterNot { it in requiredIds }
 
             null -> emptyList()
         }
         if (requiredIds.isEmpty()) {
+            logger.d(
+                TAG,
+                "createSaveInfo: no required ids for contentType=$contentType, usernameId=${targets.usernameId}, passwordId=${targets.passwordId}, cardNumberId=${targets.cardNumberId}"
+            )
             return null
         }
 
-        val focusedId = targets.focusedId
-        if (focusedId != null && focusedId !in requiredIds && focusedId !in optionalIds) {
+        if (contentType == AutofillContentType.LOGIN && targets.usernameId == null && targets.passwordId != null) {
             logger.d(
                 TAG,
-                "createSaveInfo: skipping because focusedId=$focusedId is not part of save ids"
+                "createSaveInfo: using passwordId=${targets.passwordId} as required save field because usernameId is missing"
             )
+        }
+
+        if (shouldSkipSaveInfoForFocusedId(targets, contentType, requiredIds, optionalIds)) {
             return null
         }
 
@@ -1126,6 +1154,11 @@ class SecureVaultAutofillService : AutofillService() {
             null -> return null
         }
 
+        logger.d(
+            TAG,
+            "createSaveInfo: building contentType=$contentType, focusedId=${targets.focusedId}, requiredIds=${requiredIds.size}, optionalIds=${optionalIds.size}"
+        )
+
         return SaveInfo.Builder(saveDataType, requiredIds.toTypedArray())
             .apply {
                 if (optionalIds.isNotEmpty()) {
@@ -1134,6 +1167,50 @@ class SecureVaultAutofillService : AutofillService() {
             }
             .setFlags(SaveInfo.FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE)
             .build()
+    }
+
+    private fun shouldSkipSaveInfoForFocusedId(
+        targets: SmartFieldDetector.DetectedFields,
+        contentType: AutofillContentType?,
+        requiredIds: List<AutofillId>,
+        optionalIds: List<AutofillId>
+    ): Boolean {
+        val focusedId = targets.focusedId ?: return false
+        if (focusedId in requiredIds || focusedId in optionalIds) {
+            return false
+        }
+
+        if (isCompatProxyFocusedId(targets)) {
+            logger.d(
+                TAG,
+                "createSaveInfo: allowing compat proxy focusedId=$focusedId outside save ids for contentType=$contentType"
+            )
+            return false
+        }
+
+        val focusedCredentialKind = targets.focusedNodeInfo?.credentialKind
+        val canReuseFocusedField = when (contentType) {
+            AutofillContentType.LOGIN -> {
+                focusedCredentialKind == SmartFieldDetector.CredentialKind.LOGIN ||
+                    focusedCredentialKind == SmartFieldDetector.CredentialKind.OTP
+            }
+
+            AutofillContentType.CARD -> focusedCredentialKind == SmartFieldDetector.CredentialKind.CARD
+            null -> false
+        }
+        if (canReuseFocusedField) {
+            logger.d(
+                TAG,
+                "createSaveInfo: allowing focusedId=$focusedId outside save ids because focused credentialKind=$focusedCredentialKind for contentType=$contentType"
+            )
+            return false
+        }
+
+        logger.d(
+            TAG,
+            "createSaveInfo: skipping because focusedId=$focusedId is outside save ids for contentType=$contentType, focusedCredentialKind=$focusedCredentialKind"
+        )
+        return true
     }
 
     private fun extractSavedValues(structures: List<AssistStructure>): SavedCredentialData? {
@@ -1522,6 +1599,26 @@ class SecureVaultAutofillService : AutofillService() {
             AutofillContentType.CARD -> {
                 val targetIds = cardTargetIds(targets)
                 targetIds.isNotEmpty() && targetIds.all(currentFieldValues::hasText)
+            }
+        }
+    }
+
+    private fun describeFilledFieldSuppression(
+        contentType: AutofillContentType,
+        targets: SmartFieldDetector.DetectedFields,
+        currentFieldValues: FieldValueSnapshot
+    ): String {
+        return when (contentType) {
+            AutofillContentType.LOGIN -> {
+                val usernameFilled = targets.usernameId?.let(currentFieldValues::hasText) == true
+                val passwordFilled = targets.passwordId?.let(currentFieldValues::hasText) == true
+                "login fields already satisfied usernameFilled=$usernameFilled passwordFilled=$passwordFilled usernameMissing=${targets.usernameId == null} passwordMissing=${targets.passwordId == null}"
+            }
+
+            AutofillContentType.CARD -> {
+                val targetIds = cardTargetIds(targets)
+                val filledCount = targetIds.count(currentFieldValues::hasText)
+                "card fields already satisfied filledTargets=$filledCount/${targetIds.size}"
             }
         }
     }

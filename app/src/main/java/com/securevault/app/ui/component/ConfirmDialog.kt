@@ -8,9 +8,53 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+
+@Composable
+fun DialogConfirmButton(
+    text: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    isDestructive: Boolean = false
+) {
+    val contentColor = if (isDestructive) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = contentColor,
+            disabledContentColor = contentColor.copy(alpha = 0.38f)
+        )
+    ) {
+        Text(text = text)
+    }
+}
+
+@Composable
+fun DialogDismissButton(
+    text: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    val contentColor = MaterialTheme.colorScheme.onSurface
+
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = contentColor,
+            disabledContentColor = contentColor.copy(alpha = 0.38f)
+        )
+    ) {
+        Text(text = text)
+    }
+}
 
 /**
  * 汎用の確認ダイアログ。
@@ -26,7 +70,6 @@ fun ConfirmDialog(
     onDismiss: () -> Unit
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
-    val dismissTextColor = if (surfaceColor.luminance() > 0.5f) Color.Black else Color.White
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -34,25 +77,17 @@ fun ConfirmDialog(
         title = { Text(text = title) },
         text = { Text(text = message) },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
-                val color = if (isDestructive) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.primary
-                }
-                Text(text = confirmText, color = color)
-            }
+            DialogConfirmButton(
+                text = confirmText,
+                onClick = onConfirm,
+                isDestructive = isDestructive
+            )
         },
         dismissButton = {
-            OutlinedButton(
-                onClick = onDismiss,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = dismissTextColor
-                )
-            ) {
-                Text(text = dismissText, color = dismissTextColor)
-            }
+            DialogDismissButton(
+                text = dismissText,
+                onClick = onDismiss
+            )
         }
     )
 }

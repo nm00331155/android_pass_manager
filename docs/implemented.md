@@ -1,6 +1,6 @@
 # SecureVault 実装済み一覧
 
-最終更新: 2026-03-10 13:06:40 +09:00
+最終更新: 2026-03-10 22:50:06 +09:00
 
 ## 1. この文書の位置づけ
 - `docs` 配下の旧仕様書、旧フェーズプロンプト、旧バグ修正指示書、旧作業ログを、現在の実装状態だけに整理し直した統合版です。
@@ -128,6 +128,10 @@
 - Chrome / Brave / Edge 系での response-auth / dataset-auth の使い分け調整
 - 認証後に入力されない、あるいは二度選択が必要になる挙動の緩和
 - 保存確認が multi-step ログインで出ない問題の修正
+- username 欠落の password-first 画面でも save 対象を組み立てる補強
+- Chromium compat proxy や OTP ステップ由来の `focusedId` ずれで save 情報が落ちにくいよう補強
+- Chromium compat proxy で dataset 候補を返す経路では、候補 UI を優先して `SaveInfo` の同時付与を再抑止
+- 候補抑制時に filled / missing 状態がログで追える詳細化
 - Autofill 候補 UI の視認性改善
 
 ### 6.5 OTP フローの改善
@@ -142,19 +146,22 @@
 - WebAuthn 応答の組み立て不整合修正
 - provider サービス列挙に失敗しないよう候補生成の安定化
 - 空ユーザー名 credential のスキップ
+- native app caller の署名取得を `PackageManager` 依存から `CallingAppInfo.signingInfoCompat` へ切り替え、Android 11+ package visibility に起因する passkey create origin 解決失敗を回避
 
 ### 6.7 認証 UI 改善
 - 認証画面の再入時フリーズ修正
 - 起動直後の自動認証プロンプト導入
 - 否定ボタンの高コントラスト化
 - Samsung 生体認証 UI での低コントラストな否定ボタン経路の回避
+- API 30+ で strong biometric と device credential の両方が利用可能な場合は combined authenticator を優先し、Samsung 端末で `PINを使用` ボタン付き prompt へ遷移することを確認
+- Backup 画面を含む Compose `AlertDialog` の否定ボタンを共通の高コントラストスタイルへ統一
 
 ## 7. 検証済み状態
 - `Phase 1〜6 完了` と `実装済み機能（最終）` は docs 上で整理済みです。
 - `:app:testDebugUnitTest` と `:app:assembleDebug` の成功実績があります。
 - `install_debug.bat` / `install_debug_auto.bat` による実機反映実績があります。
 - 2026-03-10 時点で `KeyPassCredentialProviderService` が OS の credential provider service 一覧に列挙されることを確認済みです。
-- Samsung 端末で認証 UI のタイトル `KeyPass` と否定ボタン `キャンセル` を確認済みです。
+- 2026-03-10 22:50 採取の `docs/securevault_post_patch_20260310_2250.xml` で、Samsung 認証 UI のタイトル `KeyPass`、subtitle `生体認証または端末認証でロックを解除してください`、`button_use_credential=PINを使用` を確認済みです。
 
 ## 8. 運用メモ
 - 一時ファイルは `D:\temp` を標準運用とします。
