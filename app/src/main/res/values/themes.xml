@@ -8,9 +8,24 @@
         <item name="postSplashScreenTheme">@style/Theme.SecureVault</item>
     </style>
 
-    <style name="Theme.SecureVault.Transparent" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <style name="Theme.SecureVault.Transparent" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowNoTitle">true</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:textColorPrimary">#FF10213A</item>
+        <item name="android:textColorSecondary">#FF384861</item>
+        <item name="android:textColorPrimaryInverse">#FF10213A</item>
+        <item name="android:textColorSecondaryInverse">#FF384861</item>
+        <item name="colorAccent">#FF2563EB</item>
+        <item name="colorPrimary">#FF2563EB</item>
+        <item name="colorPrimaryDark">#FF1D4ED8</item>
+        <item name="colorControlNormal">#FF10213A</item>
+    </style>
+
+    <style name="Theme.SecureVault.OtpWaiting" parent="Theme.AppCompat.DayNight.Dialog.Alert">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowCloseOnTouchOutside">false</item>
+        <item name="android:backgroundDimEnabled">true</item>
     </style>
 </resources>

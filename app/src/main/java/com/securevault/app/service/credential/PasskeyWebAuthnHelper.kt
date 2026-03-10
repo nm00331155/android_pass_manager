@@ -22,6 +22,11 @@ import org.json.JSONObject
 
 object PasskeyWebAuthnHelper {
 
+    data class CreateRequestDisplayInfo(
+        val rpLabel: String,
+        val userName: String
+    )
+
     data class CreateRequestInfo(
         val rpId: String,
         val rpName: String?,
@@ -47,14 +52,28 @@ object PasskeyWebAuthnHelper {
         val updatedSignCount: Long
     )
 
-    fun parseCreateRequest(requestJson: String): CreateRequestInfo {
+    fun parseCreateRequestDisplay(requestJson: String): CreateRequestDisplayInfo {
         val json = JSONObject(requestJson)
         val rpJson = json.getJSONObject("rp")
         val userJson = json.getJSONObject("user")
 
-        val rpId = rpJson.optString("id").ifBlank {
-            throw IllegalArgumentException("Missing rp.id")
-        }
+        return CreateRequestDisplayInfo(
+            rpLabel = rpJson.optString("name").takeIf { it.isNotBlank() }
+                ?: rpJson.optString("id").takeIf { it.isNotBlank() }
+                ?: DEFAULT_PASSKEY_PROVIDER_LABEL,
+            userName = userJson.optString("name").takeIf { it.isNotBlank() }
+                ?: userJson.optString("displayName").takeIf { it.isNotBlank() }
+                ?: DEFAULT_PASSKEY_ACCOUNT_LABEL
+        )
+    }
+
+    fun parseCreateRequest(requestJson: String, origin: String? = null): CreateRequestInfo {
+        val json = JSONObject(requestJson)
+        val rpJson = json.getJSONObject("rp")
+        val userJson = json.getJSONObject("user")
+
+        val rpId = resolveRpId(rpJson, origin)
+            ?: throw IllegalArgumentException("Missing rp.id")
         val challenge = json.optString("challenge").ifBlank {
             throw IllegalArgumentException("Missing challenge")
         }
@@ -77,6 +96,37 @@ object PasskeyWebAuthnHelper {
             userHandle = userHandle,
             challenge = challenge
         )
+    }
+
+    private fun resolveRpId(rpJson: JSONObject, origin: String?): String? {
+        val explicitRpId = rpJson.optString("id").takeIf { it.isNotBlank() }
+        if (!explicitRpId.isNullOrBlank()) {
+            return explicitRpId
+        }
+
+        extractDomainFromOrigin(origin)?.let { return it }
+
+        val rpName = rpJson.optString("name").takeIf { it.isNotBlank() }
+        if (!rpName.isNullOrBlank() && looksLikeRpId(rpName)) {
+            return rpName.lowercase()
+        }
+
+        return null
+    }
+
+    private fun extractDomainFromOrigin(origin: String?): String? {
+        return origin
+            ?.trim()
+            ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+            ?.substringAfter("://")
+            ?.substringBefore('/')
+            ?.substringBefore(':')
+            ?.lowercase()
+            ?.ifBlank { null }
+    }
+
+    private fun looksLikeRpId(value: String): Boolean {
+        return value.contains('.') && !value.contains(' ') && !value.startsWith("android:")
     }
 
     fun parseGetRequest(requestJson: String): GetRequestInfo {
@@ -109,7 +159,7 @@ object PasskeyWebAuthnHelper {
         clientDataHash: ByteArray?,
         packageName: String?
     ): RegistrationResult {
-        val requestInfo = parseCreateRequest(requestJson)
+        val requestInfo = parseCreateRequest(requestJson, origin)
         val keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM).apply {
             initialize(ECGenParameterSpec(EC_CURVE), SecureRandom())
         }
@@ -120,8 +170,7 @@ object PasskeyWebAuthnHelper {
             type = CLIENT_DATA_CREATE,
             challenge = requestInfo.challenge,
             origin = origin,
-            packageName = packageName,
-            usePlaceholder = clientDataHash != null
+            packageName = packageName
         )
         val authData = buildRegistrationAuthenticatorData(
             rpId = requestInfo.rpId,
@@ -137,10 +186,13 @@ object PasskeyWebAuthnHelper {
             .put("clientExtensionResults", JSONObject())
             .put(
                 "response",
-                JSONObject()
-                    .put("clientDataJSON", encodeBase64Url(clientDataJsonBytes))
-                    .put("attestationObject", encodeBase64Url(attestationObject))
-                    .put("transports", JSONArray().put(TRANSPORT_INTERNAL))
+                JSONObject().apply {
+                    if (clientDataHash == null) {
+                        put("clientDataJSON", encodeBase64Url(clientDataJsonBytes))
+                    }
+                    put("attestationObject", encodeBase64Url(attestationObject))
+                    put("transports", JSONArray().put(TRANSPORT_INTERNAL))
+                }
             )
             .toString()
 
@@ -180,8 +232,7 @@ object PasskeyWebAuthnHelper {
             type = CLIENT_DATA_GET,
             challenge = requestInfo.challenge,
             origin = origin,
-            packageName = packageName,
-            usePlaceholder = clientDataHash != null
+            packageName = packageName
         )
         val signedClientDataHash = clientDataHash ?: sha256(clientDataJsonBytes)
         val updatedSignCount = passkeyData.signCount + 1
@@ -201,11 +252,14 @@ object PasskeyWebAuthnHelper {
             .put("clientExtensionResults", JSONObject())
             .put(
                 "response",
-                JSONObject()
-                    .put("clientDataJSON", encodeBase64Url(clientDataJsonBytes))
-                    .put("authenticatorData", encodeBase64Url(authenticatorData))
-                    .put("signature", encodeBase64Url(signature))
-                    .put("userHandle", passkeyData.userHandle)
+                JSONObject().apply {
+                    if (clientDataHash == null) {
+                        put("clientDataJSON", encodeBase64Url(clientDataJsonBytes))
+                    }
+                    put("authenticatorData", encodeBase64Url(authenticatorData))
+                    put("signature", encodeBase64Url(signature))
+                    put("userHandle", passkeyData.userHandle)
+                }
             )
             .toString()
 
@@ -237,12 +291,11 @@ object PasskeyWebAuthnHelper {
         type: String,
         challenge: String,
         origin: String,
-        packageName: String?,
-        usePlaceholder: Boolean
+        packageName: String?
     ): ByteArray {
         val json = JSONObject()
             .put("type", type)
-            .put("challenge", if (usePlaceholder) PLACEHOLDER_CHALLENGE else challenge)
+            .put("challenge", challenge)
             .put("origin", origin)
             .put("crossOrigin", false)
 
@@ -403,7 +456,6 @@ object PasskeyWebAuthnHelper {
     private const val PUBLIC_KEY_TYPE = "public-key"
     private const val AUTHENTICATOR_ATTACHMENT = "platform"
     private const val TRANSPORT_INTERNAL = "internal"
-    private const val PLACEHOLDER_CHALLENGE = "client-data-hash"
     private const val CLIENT_DATA_CREATE = "webauthn.create"
     private const val CLIENT_DATA_GET = "webauthn.get"
     private const val KEY_ALGORITHM = "EC"
@@ -421,4 +473,6 @@ object PasskeyWebAuthnHelper {
     private const val MAJOR_BYTE_STRING = 2
     private const val MAJOR_TEXT = 3
     private const val MAJOR_MAP = 5
+    private const val DEFAULT_PASSKEY_PROVIDER_LABEL = "Passkey"
+    private const val DEFAULT_PASSKEY_ACCOUNT_LABEL = "account"
 }

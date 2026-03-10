@@ -162,8 +162,18 @@
     <!-- OTP -->
     <string name="otp_sms_suggestion">SMS から認証コードを自動入力</string>
     <string name="otp_waiting_for_code">認証コードを待機しています</string>
+    <string name="otp_waiting_message">届いた認証コードを自動で取得しています。待機をやめる場合はキャンセルしてください。</string>
+    <string name="otp_waiting_cancel">待機を中止</string>
+    <string name="otp_detected_title">認証コードを検出しました</string>
+    <string name="otp_timeout_title">認証コードを取得できませんでした</string>
+    <string name="otp_timeout_message">時間をおいてもう一度お試しください。</string>
+    <string name="otp_unavailable_title">認証コードを待機できません</string>
+    <string name="otp_sms_permission_denied_message">SMS 自動取得の利用権限がありません。設定を確認してください。</string>
+    <string name="otp_sms_unavailable_message">この端末では SMS 自動取得が利用できません。</string>
+    <string name="otp_no_source_enabled_message">OTP の取得元が有効になっていません。設定で SMS・通知・クリップボードを確認してください。</string>
     <string name="otp_detected">認証コードを検出しました: %1$s</string>
     <string name="otp_clipboard_detected">クリップボードから認証コードを検出しました</string>
+
 
     <!-- バックアップ -->
     <string name="backup_title">バックアップ・復元</string>

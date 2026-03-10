@@ -113,7 +113,13 @@ class CredentialProviderAuthActivity : FragmentActivity() {
             return
         }
 
-        when (val option = request.credentialOptions.firstOrNull()) {
+        val selectedOption = when {
+            credential.isPasskey -> request.credentialOptions.firstOrNull { it is GetPublicKeyCredentialOption }
+            credential.hasPassword -> request.credentialOptions.firstOrNull { it is GetPasswordOption }
+            else -> request.credentialOptions.firstOrNull()
+        }
+
+        when (val option = selectedOption) {
             is GetPasswordOption -> returnPasswordCredential(credential)
             is GetPublicKeyCredentialOption -> returnPasskeyCredential(
                 credential = credential,
@@ -254,7 +260,7 @@ class CredentialProviderAuthActivity : FragmentActivity() {
         }
 
         val requestInfo = runCatching {
-            PasskeyWebAuthnHelper.parseCreateRequest(request.requestJson)
+            PasskeyWebAuthnHelper.parseCreateRequest(request.requestJson, origin)
         }.onFailure { throwable ->
             logger.e(TAG, "Failed to parse passkey create request", throwable)
         }.getOrNull()

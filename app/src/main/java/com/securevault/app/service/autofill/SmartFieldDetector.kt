@@ -285,6 +285,12 @@ class SmartFieldDetector @Inject constructor(
             return false
         }
 
+        if (isUsernameField(node, hints, idEntry, hintText, nodeText, htmlTokens) ||
+            isPasswordField(node, hints, idEntry, hintText, nodeText, htmlTokens)
+        ) {
+            return false
+        }
+
         val textInputLike = isTextInputLike(node, hints, htmlTokens)
         val allTokens = buildList {
             addAll(hints)
@@ -302,6 +308,10 @@ class SmartFieldDetector @Inject constructor(
             OTP_KEYWORDS.any { keyword -> token.contains(keyword) }
         }
 
+        val loginIdentifierMatched = allTokens.any { token ->
+            LOGIN_IDENTIFIER_EXCLUSION_KEYWORDS.any { keyword -> token.contains(keyword) }
+        }
+
         if (!textInputLike) {
             return false
         }
@@ -312,7 +322,9 @@ class SmartFieldDetector @Inject constructor(
 
         val inputClass = node.inputType and InputType.TYPE_MASK_CLASS
         val maxLength = node.maxTextLength
-        return inputClass == InputType.TYPE_CLASS_NUMBER && maxLength in OTP_MIN_LENGTH..OTP_MAX_LENGTH
+        return !loginIdentifierMatched &&
+            inputClass == InputType.TYPE_CLASS_NUMBER &&
+            maxLength in OTP_MIN_LENGTH..OTP_MAX_LENGTH
     }
 
     private fun isCardholderNameField(
@@ -683,9 +695,12 @@ class SmartFieldDetector @Inject constructor(
 
         val OTP_HINT_TOKENS = listOf(
             "smsotpcode",
+            "one-time-code",
+            "onetimecode",
+            "verificationcode",
+            "authcode",
             "otp",
             "verification",
-            "code",
             "認証コード",
             "確認コード",
             "ワンタイム"
@@ -693,15 +708,38 @@ class SmartFieldDetector @Inject constructor(
 
         val OTP_KEYWORDS = listOf(
             "otp",
-            "code",
+            "one-time-code",
+            "onetimecode",
             "token",
+            "authcode",
             "verify",
             "verification",
+            "verificationcode",
             "認証コード",
             "確認コード",
             "ワンタイム",
             "二段階",
             "確認番号"
+        )
+
+        val LOGIN_IDENTIFIER_EXCLUSION_KEYWORDS = listOf(
+            "user",
+            "username",
+            "login",
+            "mail",
+            "email",
+            "account",
+            "member",
+            "customer",
+            "userid",
+            "loginid",
+            "memberid",
+            "customerid",
+            "ユーザー",
+            "ログイン",
+            "メール",
+            "アカウント",
+            "会員"
         )
 
         val CARDHOLDER_NAME_KEYWORDS = listOf(

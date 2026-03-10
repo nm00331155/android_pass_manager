@@ -90,6 +90,50 @@ class SmartFieldDetectorTest {
     }
 
     @Test
+    fun `member id numeric field is login not otp`() {
+        val focusedId = autofillId("member-id")
+        val structure = structureOf(
+            node(
+                autofillId = focusedId,
+                idEntry = "member_id",
+                hint = "会員番号",
+                inputType = InputType.TYPE_CLASS_NUMBER,
+                htmlTag = "input",
+                htmlAttributes = listOf("type" to "number"),
+                maxTextLength = 6
+            )
+        )
+
+        val detected = detector.detect(structure, focusedId)
+
+        assertEquals(focusedId, detected.usernameId)
+        assertNull(detected.otpId)
+        assertEquals(SmartFieldDetector.CredentialKind.LOGIN, detected.focusedNodeInfo?.credentialKind)
+    }
+
+    @Test
+    fun `verification code field remains detectable as otp`() {
+        val focusedId = autofillId("otp")
+        val structure = structureOf(
+            node(
+                autofillId = focusedId,
+                idEntry = "verification_code",
+                hint = "認証コード",
+                inputType = InputType.TYPE_CLASS_NUMBER,
+                htmlTag = "input",
+                htmlAttributes = listOf("type" to "text", "autocomplete" to "one-time-code"),
+                maxTextLength = 6
+            )
+        )
+
+        val detected = detector.detect(structure, focusedId)
+
+        assertEquals(focusedId, detected.otpId)
+        assertNull(detected.usernameId)
+        assertEquals(SmartFieldDetector.CredentialKind.OTP, detected.focusedNodeInfo?.credentialKind)
+    }
+
+    @Test
     fun `credit card fields are detected as card autofill targets`() {
         val cardNumberId = autofillId("card-number")
         val expiryId = autofillId("card-exp")

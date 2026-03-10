@@ -96,7 +96,7 @@ class KeyPassCredentialProviderService : CredentialProviderService() {
 
                 is BeginCreatePublicKeyCredentialRequest -> {
                     val requestInfo = runCatching {
-                        PasskeyWebAuthnHelper.parseCreateRequest(request.requestJson)
+                        PasskeyWebAuthnHelper.parseCreateRequestDisplay(request.requestJson)
                     }.onFailure { throwable ->
                         logger.w(TAG, "onBeginCreateCredentialRequest: failed to parse passkey request", throwable)
                     }.getOrNull()
@@ -107,7 +107,7 @@ class KeyPassCredentialProviderService : CredentialProviderService() {
                         listOf(
                             createEntry(
                                 accountName = requestInfo.userName,
-                                description = requestInfo.rpName ?: requestInfo.rpId,
+                                description = requestInfo.rpLabel,
                                 flowType = CredentialProviderAuthActivity.FLOW_CREATE_PASSKEY,
                                 requestCode = FLOW_CREATE_PASSKEY_REQUEST_CODE,
                                 passwordCount = passwordCount,

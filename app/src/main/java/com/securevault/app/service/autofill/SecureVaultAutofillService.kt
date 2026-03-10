@@ -33,6 +33,10 @@ import com.securevault.app.data.repository.CredentialRepository
 import com.securevault.app.data.repository.model.CardData
 import com.securevault.app.data.repository.model.Credential
 import com.securevault.app.data.repository.model.CredentialType
+import com.securevault.app.data.store.SecuritySettingsPreferences
+import com.securevault.app.data.store.securitySettingsDataStore
+import com.securevault.app.service.otp.OtpManager
+import com.securevault.app.service.otp.OtpSource
 import com.securevault.app.service.otp.SmsOtpActivity
 import com.securevault.app.service.otp.SmsOtpManager
 import com.securevault.app.util.AppLogger
@@ -62,6 +66,9 @@ class SecureVaultAutofillService : AutofillService() {
 
     @Inject
     lateinit var smsOtpManager: SmsOtpManager
+
+    @Inject
+    lateinit var otpManager: OtpManager
 
     @Inject
     lateinit var logger: AppLogger
@@ -130,7 +137,15 @@ class SecureVaultAutofillService : AutofillService() {
                     "onFillRequest: detected focusedId=${targets.focusedId}, focusedSupportsTrigger=${targets.focusedNodeInfo?.supportsAutofillTrigger}, contentType=$contentType, usernameId=${targets.usernameId}, passwordId=${targets.passwordId}, cardholderNameId=${targets.cardholderNameId}, cardNumberId=${targets.cardNumberId}, cardExpirationDateId=${targets.cardExpirationDateId}, cardExpirationMonthId=${targets.cardExpirationMonthId}, cardExpirationYearId=${targets.cardExpirationYearId}, cardSecurityCodeId=${targets.cardSecurityCodeId}, otpId=${targets.otpId}, webDomain=${targets.webDomain}, pageTitle=${targets.pageTitle}"
                 )
 
-                if (contentType == null && targets.otpId == null) {
+                val shouldOfferOtp = shouldOfferOtpDataset(targets)
+                val allowedOtpSources = if (shouldOfferOtp) {
+                    loadAllowedOtpSources()
+                } else {
+                    emptySet()
+                }
+                val shouldOfferOtpNow = shouldOfferOtp && allowedOtpSources.isNotEmpty()
+
+                if (contentType == null && !shouldOfferOtpNow) {
                     logger.d(TAG, "onFillRequest: no fields detected")
                     deliverFillResponse(callback, cancellationSignal, null)
                     return@launch
@@ -142,7 +157,7 @@ class SecureVaultAutofillService : AutofillService() {
                     return@launch
                 }
 
-                if (targets.otpId != null) {
+                if (shouldOfferOtpNow && OtpSource.SMS in allowedOtpSources) {
                     runCatching {
                         smsOtpManager.startListening()
                     }.onFailure { throwable ->
@@ -190,7 +205,8 @@ class SecureVaultAutofillService : AutofillService() {
                     targets = targets,
                     credentials = credentials,
                     inlineRequest = inlineRequest,
-                    contentType = contentType
+                    contentType = contentType,
+                    allowedOtpSources = allowedOtpSources
                 )
                 logger.d(TAG, "onFillRequest: responseBuilt=${response != null}")
 
@@ -218,13 +234,16 @@ class SecureVaultAutofillService : AutofillService() {
     override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
         logger.d(TAG, "=== onSaveRequest START ===")
 
-        val structure = request.fillContexts.lastOrNull()?.structure
-        if (structure == null) {
-            logger.w(TAG, "onSaveRequest: structure is null")
+        val structures = request.fillContexts.mapNotNull { it.structure }
+        if (structures.isEmpty()) {
+            logger.w(TAG, "onSaveRequest: structures are empty")
             callback.onSuccess()
             return
         }
 
+        logger.d(TAG, "onSaveRequest: fillContextCount=${structures.size}")
+
+        val structure = structures.last()
         val targetPackageName = structure.activityComponent?.packageName.orEmpty()
         if (targetPackageName in EXCLUDED_PACKAGES || targetPackageName == packageName) {
             logger.d(TAG, "onSaveRequest: skipping excluded package=$targetPackageName")
@@ -234,7 +253,7 @@ class SecureVaultAutofillService : AutofillService() {
 
         serviceScope.launch {
             runCatching {
-                val savedData = extractSavedValues(structure)
+                val savedData = extractSavedValues(structures)
                 logger.d(
                     TAG,
                     "onSaveRequest: extracted type=${savedData?.credentialType}, username=${savedData?.username}, hasPassword=${!savedData?.password.isNullOrBlank()}, hasCard=${savedData?.cardData != null}, package=${savedData?.packageName}, domain=${savedData?.webDomain}"
@@ -455,7 +474,8 @@ class SecureVaultAutofillService : AutofillService() {
         targets: SmartFieldDetector.DetectedFields,
         credentials: List<Credential>,
         inlineRequest: InlineSuggestionsRequest?,
-        contentType: AutofillContentType?
+        contentType: AutofillContentType?,
+        allowedOtpSources: Set<OtpSource>
     ): FillResponse? {
         logger.d(
             TAG,
@@ -463,7 +483,8 @@ class SecureVaultAutofillService : AutofillService() {
         )
 
         val saveInfo = createSaveInfo(targets, contentType)
-        if (credentials.isEmpty() && saveInfo == null && targets.otpId == null) {
+        val shouldOfferOtp = shouldOfferOtpDataset(targets) && allowedOtpSources.isNotEmpty()
+        if (credentials.isEmpty() && saveInfo == null && !shouldOfferOtp) {
             logger.d(TAG, "buildFillResponse: no dataset and no saveInfo")
             return null
         }
@@ -492,7 +513,7 @@ class SecureVaultAutofillService : AutofillService() {
             )
         }
 
-        if (shouldUseResponseAuthentication(targetPackageName, credentials, targets, contentType)) {
+        if (shouldUseResponseAuthentication(targetPackageName, credentials, targets, contentType, shouldOfferOtp)) {
             val responseAuthResult = buildResponseAuthenticationFillResponse(
                 targetPackageName = targetPackageName,
                 targets = targets,
@@ -613,16 +634,19 @@ class SecureVaultAutofillService : AutofillService() {
             }
         }
 
-        targets.otpId?.let { otpId ->
+        targets.otpId?.takeIf { shouldOfferOtp }?.let { otpId ->
             try {
                 val otpPresentation = createOtpPresentation()
                 val otpDialogPresentation = createOtpDialogPresentation()
-                val otpPendingIntent = createOtpAuthenticationPendingIntent(otpId)
+                val recentOtp = otpManager.getRecentOtp(
+                    allowedSources = allowedOtpSources,
+                    maxAgeMs = RECENT_OTP_MAX_AGE_MS
+                )
                 val otpDatasetBuilder = createDatasetBuilder(
                     menuPresentation = otpPresentation,
                     dialogPresentation = otpDialogPresentation,
                     inlinePresentation = null
-                ).setAuthentication(otpPendingIntent.intentSender)
+                )
                 maybeAddFocusedTriggerValue(
                     datasetBuilder = otpDatasetBuilder,
                     focusedId = targets.focusedId,
@@ -630,14 +654,27 @@ class SecureVaultAutofillService : AutofillService() {
                     presentation = otpPresentation,
                     allowFocusedTrigger = allowFocusedTrigger
                 )
-                otpDatasetBuilder.setValue(
-                    otpId,
-                    null,
-                    otpPresentation
-                )
+
+                if (recentOtp != null) {
+                    otpDatasetBuilder.setValue(
+                        otpId,
+                        AutofillValue.forText(recentOtp.code),
+                        otpPresentation
+                    )
+                    logger.d(TAG, "buildFillResponse: added direct otp dataset source=${recentOtp.source}")
+                } else {
+                    val otpPendingIntent = createOtpAuthenticationPendingIntent(otpId)
+                    otpDatasetBuilder.setAuthentication(otpPendingIntent.intentSender)
+                    otpDatasetBuilder.setValue(
+                        otpId,
+                        null,
+                        otpPresentation
+                    )
+                    logger.d(TAG, "buildFillResponse: added deferred otp dataset (auth gate enabled)")
+                }
+
                 responseBuilder.addDataset(otpDatasetBuilder.build())
                 hasDataset = true
-                logger.d(TAG, "buildFillResponse: added otp dataset (auth gate enabled)")
             } catch (e: Exception) {
                 logger.e(TAG, "buildFillResponse: EXCEPTION building OTP dataset", e)
             }
@@ -662,7 +699,8 @@ class SecureVaultAutofillService : AutofillService() {
         targetPackageName: String,
         credentials: List<Credential>,
         targets: SmartFieldDetector.DetectedFields,
-        contentType: AutofillContentType?
+        contentType: AutofillContentType?,
+        shouldOfferOtp: Boolean
     ): Boolean {
         val credential = credentials.singleOrNull() ?: return false
         if (contentType != AutofillContentType.LOGIN) {
@@ -684,9 +722,51 @@ class SecureVaultAutofillService : AutofillService() {
             targets.focusedId == targets.passwordId
 
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            targets.otpId == null &&
+            !shouldOfferOtp &&
             focusedMatchesDetectedField &&
             (targets.usernameId != null || targets.passwordId != null)
+    }
+
+    private fun shouldOfferOtpDataset(targets: SmartFieldDetector.DetectedFields): Boolean {
+        val otpId = targets.otpId ?: return false
+        val focusedId = targets.focusedId ?: return true
+        if (focusedId == otpId) {
+            return true
+        }
+
+        if (targets.focusedNodeInfo?.credentialKind == SmartFieldDetector.CredentialKind.OTP) {
+            return true
+        }
+
+        logger.d(
+            TAG,
+            "buildFillResponse: suppressing otp dataset for focusedId=$focusedId because otpId=$otpId is not focused"
+        )
+        return false
+    }
+
+    private suspend fun loadAllowedOtpSources(): Set<OtpSource> {
+        val settings = applicationContext.securitySettingsDataStore.data.first()
+        return buildSet {
+            if (
+                settings[SecuritySettingsPreferences.OTP_SMS_ENABLED_KEY]
+                    ?: SecuritySettingsPreferences.DEFAULT_OTP_SMS_ENABLED
+            ) {
+                add(OtpSource.SMS)
+            }
+            if (
+                settings[SecuritySettingsPreferences.OTP_NOTIFICATION_ENABLED_KEY]
+                    ?: SecuritySettingsPreferences.DEFAULT_OTP_NOTIFICATION_ENABLED
+            ) {
+                add(OtpSource.NOTIFICATION)
+            }
+            if (
+                settings[SecuritySettingsPreferences.OTP_CLIPBOARD_ENABLED_KEY]
+                    ?: SecuritySettingsPreferences.DEFAULT_OTP_CLIPBOARD_ENABLED
+            ) {
+                add(OtpSource.CLIPBOARD)
+            }
+        }
     }
 
     private fun buildResponseAuthenticationFillResponse(
@@ -1056,9 +1136,12 @@ class SecureVaultAutofillService : AutofillService() {
             .build()
     }
 
-    private fun extractSavedValues(structure: AssistStructure): SavedCredentialData? {
-        val detectedFields = smartFieldDetector.detect(structure)
-        val contentType = determineContentType(detectedFields)
+    private fun extractSavedValues(structures: List<AssistStructure>): SavedCredentialData? {
+        if (structures.isEmpty()) {
+            return null
+        }
+
+        var detectedContentType: AutofillContentType? = null
         var username: String? = null
         var password: String? = null
         var cardholderName: String? = null
@@ -1067,111 +1150,128 @@ class SecureVaultAutofillService : AutofillService() {
         var cardExpirationMonth: String? = null
         var cardExpirationYear: String? = null
         var cardSecurityCode: String? = null
-        var packageName = structure.activityComponent?.packageName.orEmpty()
-        var webDomain = detectedFields.webDomain
+        var packageName = ""
+        var webDomain: String? = null
 
-        fun traverse(node: AssistStructure.ViewNode) {
+        structures.forEachIndexed { contextIndex, structure ->
+            val detectedFields = smartFieldDetector.detect(structure)
+            val contentType = determineContentType(detectedFields)
+            detectedContentType = when {
+                detectedContentType == AutofillContentType.CARD || contentType == AutofillContentType.CARD -> AutofillContentType.CARD
+                detectedContentType == AutofillContentType.LOGIN || contentType == AutofillContentType.LOGIN -> AutofillContentType.LOGIN
+                else -> detectedContentType ?: contentType
+            }
+
             if (packageName.isBlank()) {
-                val packageFromNode = node.idPackage?.trim().orEmpty()
-                if (packageFromNode.isNotBlank()) {
-                    packageName = packageFromNode
-                }
+                packageName = structure.activityComponent?.packageName.orEmpty()
             }
-
             if (webDomain.isNullOrBlank()) {
-                val domain = node.webDomain?.toString()?.trim()
-                if (!domain.isNullOrEmpty()) {
-                    webDomain = domain
+                webDomain = detectedFields.webDomain
+            }
+
+            fun traverse(node: AssistStructure.ViewNode) {
+                if (packageName.isBlank()) {
+                    val packageFromNode = node.idPackage?.trim().orEmpty()
+                    if (packageFromNode.isNotBlank()) {
+                        packageName = packageFromNode
+                    }
+                }
+
+                if (webDomain.isNullOrBlank()) {
+                    val domain = node.webDomain?.toString()?.trim()
+                    if (!domain.isNullOrEmpty()) {
+                        webDomain = domain
+                    }
+                }
+
+                val rawTextValue = node.autofillValue
+                    ?.takeIf { it.isText }
+                    ?.textValue
+                    ?.toString()
+                val trimmedTextValue = rawTextValue?.trim()
+
+                if (!trimmedTextValue.isNullOrEmpty()) {
+                    val nodeAutofillId = node.autofillId
+                    if (username.isNullOrBlank()) {
+                        val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.usernameId
+                        if (byDetectedId || isLikelyUsernameField(node)) {
+                            username = trimmedTextValue
+                            logger.d(TAG, "extractSavedValues: captured username from context=$contextIndex")
+                        }
+                    }
+
+                    if (password.isNullOrBlank() && !rawTextValue.isNullOrBlank()) {
+                        val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.passwordId
+                        if (byDetectedId || isLikelyPasswordField(node)) {
+                            password = rawTextValue
+                            logger.d(TAG, "extractSavedValues: captured password from context=$contextIndex")
+                        }
+                    }
+
+                    if (cardholderName.isNullOrBlank()) {
+                        val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardholderNameId
+                        if (byDetectedId || isLikelyCardholderNameField(node)) {
+                            cardholderName = trimmedTextValue
+                            logger.d(TAG, "extractSavedValues: captured cardholderName from context=$contextIndex")
+                        }
+                    }
+
+                    if (cardNumber.isNullOrBlank()) {
+                        val normalizedCardNumber = rawTextValue.orEmpty().filter(Char::isDigit)
+                        val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardNumberId
+                        if (normalizedCardNumber.isNotBlank() && (byDetectedId || isLikelyCardNumberField(node))) {
+                            cardNumber = normalizedCardNumber
+                            logger.d(TAG, "extractSavedValues: captured cardNumber from context=$contextIndex")
+                        }
+                    }
+
+                    if (cardExpirationDate.isNullOrBlank()) {
+                        val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardExpirationDateId
+                        if (byDetectedId || isLikelyCardExpirationDateField(node)) {
+                            cardExpirationDate = trimmedTextValue
+                            logger.d(TAG, "extractSavedValues: captured cardExpirationDate from context=$contextIndex")
+                        }
+                    }
+
+                    if (cardExpirationMonth.isNullOrBlank()) {
+                        val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardExpirationMonthId
+                        if (byDetectedId || isLikelyCardExpirationMonthField(node)) {
+                            cardExpirationMonth = trimmedTextValue
+                            logger.d(TAG, "extractSavedValues: captured cardExpirationMonth from context=$contextIndex")
+                        }
+                    }
+
+                    if (cardExpirationYear.isNullOrBlank()) {
+                        val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardExpirationYearId
+                        if (byDetectedId || isLikelyCardExpirationYearField(node)) {
+                            cardExpirationYear = trimmedTextValue
+                            logger.d(TAG, "extractSavedValues: captured cardExpirationYear from context=$contextIndex")
+                        }
+                    }
+
+                    if (cardSecurityCode.isNullOrBlank()) {
+                        val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardSecurityCodeId
+                        if (byDetectedId || isLikelyCardSecurityCodeField(node)) {
+                            cardSecurityCode = trimmedTextValue
+                            logger.d(TAG, "extractSavedValues: captured cardSecurityCode from context=$contextIndex")
+                        }
+                    }
+                }
+
+                for (index in 0 until node.childCount) {
+                    traverse(node.getChildAt(index))
                 }
             }
 
-            val rawTextValue = node.autofillValue
-                ?.takeIf { it.isText }
-                ?.textValue
-                ?.toString()
-            val trimmedTextValue = rawTextValue?.trim()
-
-            if (!trimmedTextValue.isNullOrEmpty()) {
-                val nodeAutofillId = node.autofillId
-                if (username.isNullOrBlank()) {
-                    val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.usernameId
-                    if (byDetectedId || isLikelyUsernameField(node)) {
-                        username = trimmedTextValue
-                        logger.d(TAG, "extractSavedValues: captured username")
-                    }
-                }
-
-                if (password.isNullOrBlank() && !rawTextValue.isNullOrBlank()) {
-                    val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.passwordId
-                    if (byDetectedId || isLikelyPasswordField(node)) {
-                        password = rawTextValue
-                        logger.d(TAG, "extractSavedValues: captured password")
-                    }
-                }
-
-                if (cardholderName.isNullOrBlank()) {
-                    val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardholderNameId
-                    if (byDetectedId || isLikelyCardholderNameField(node)) {
-                        cardholderName = trimmedTextValue
-                        logger.d(TAG, "extractSavedValues: captured cardholderName")
-                    }
-                }
-
-                if (cardNumber.isNullOrBlank()) {
-                    val normalizedCardNumber = rawTextValue.orEmpty().filter(Char::isDigit)
-                    val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardNumberId
-                    if (normalizedCardNumber.isNotBlank() && (byDetectedId || isLikelyCardNumberField(node))) {
-                        cardNumber = normalizedCardNumber
-                        logger.d(TAG, "extractSavedValues: captured cardNumber")
-                    }
-                }
-
-                if (cardExpirationDate.isNullOrBlank()) {
-                    val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardExpirationDateId
-                    if (byDetectedId || isLikelyCardExpirationDateField(node)) {
-                        cardExpirationDate = trimmedTextValue
-                        logger.d(TAG, "extractSavedValues: captured cardExpirationDate")
-                    }
-                }
-
-                if (cardExpirationMonth.isNullOrBlank()) {
-                    val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardExpirationMonthId
-                    if (byDetectedId || isLikelyCardExpirationMonthField(node)) {
-                        cardExpirationMonth = trimmedTextValue
-                        logger.d(TAG, "extractSavedValues: captured cardExpirationMonth")
-                    }
-                }
-
-                if (cardExpirationYear.isNullOrBlank()) {
-                    val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardExpirationYearId
-                    if (byDetectedId || isLikelyCardExpirationYearField(node)) {
-                        cardExpirationYear = trimmedTextValue
-                        logger.d(TAG, "extractSavedValues: captured cardExpirationYear")
-                    }
-                }
-
-                if (cardSecurityCode.isNullOrBlank()) {
-                    val byDetectedId = nodeAutofillId != null && nodeAutofillId == detectedFields.cardSecurityCodeId
-                    if (byDetectedId || isLikelyCardSecurityCodeField(node)) {
-                        cardSecurityCode = trimmedTextValue
-                        logger.d(TAG, "extractSavedValues: captured cardSecurityCode")
-                    }
-                }
+            for (windowIndex in 0 until structure.windowNodeCount) {
+                val root = structure.getWindowNodeAt(windowIndex).rootViewNode
+                traverse(root)
             }
-
-            for (index in 0 until node.childCount) {
-                traverse(node.getChildAt(index))
-            }
-        }
-
-        for (windowIndex in 0 until structure.windowNodeCount) {
-            val root = structure.getWindowNodeAt(windowIndex).rootViewNode
-            traverse(root)
         }
 
         val resolvedPackageName = packageName.ifBlank { UNKNOWN_PACKAGE }
         val resolvedContentType = when {
-            contentType != null -> contentType
+            detectedContentType != null -> detectedContentType
             !cardNumber.isNullOrBlank() -> AutofillContentType.CARD
             !username.isNullOrBlank() || !password.isNullOrBlank() -> AutofillContentType.LOGIN
             else -> null
@@ -1635,6 +1735,7 @@ class SecureVaultAutofillService : AutofillService() {
         const val BROWSER_GUIDE_PREFS = "browser_guide_prefs"
         const val BROWSER_GUIDE_NOTIFICATION_ID = 13000
         const val CARD_LABEL_DIGITS = 4
+        const val RECENT_OTP_MAX_AGE_MS = 5 * 60_000L
 
         /** Autofill の対象から除外するパッケージ */
         val EXCLUDED_PACKAGES = setOf(

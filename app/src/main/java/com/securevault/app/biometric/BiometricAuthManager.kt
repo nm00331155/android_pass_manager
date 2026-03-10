@@ -57,8 +57,7 @@ class BiometricAuthManager @Inject constructor() {
 
         val authenticators = when {
             strongBiometric == BiometricManager.BIOMETRIC_SUCCESS -> {
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                BiometricManager.Authenticators.BIOMETRIC_STRONG
             }
             deviceCredential == BiometricManager.BIOMETRIC_SUCCESS -> {
                 _authState.value = AuthUiState.DeviceCredentialFallback
@@ -73,11 +72,16 @@ class BiometricAuthManager @Inject constructor() {
             }
         }
 
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        val promptBuilder = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
             .setAllowedAuthenticators(authenticators)
-            .build()
+
+        if (authenticators == BiometricManager.Authenticators.BIOMETRIC_STRONG) {
+            promptBuilder.setNegativeButtonText(activity.getString(android.R.string.cancel))
+        }
+
+        val promptInfo = promptBuilder.build()
 
         val prompt = BiometricPrompt(
             activity,

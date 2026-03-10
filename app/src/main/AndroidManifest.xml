@@ -41,7 +41,8 @@
 
         <activity
             android:name=".service.otp.SmsOtpActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:theme="@style/Theme.SecureVault.OtpWaiting" />
 
         <receiver
             android:name=".service.otp.SmsOtpReceiver"

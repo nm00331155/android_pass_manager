@@ -6,8 +6,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -23,6 +26,9 @@ class OtpManager @Inject constructor(
 
     private val _otpEvents = MutableSharedFlow<OtpEvent>(replay = 0, extraBufferCapacity = 3)
     val otpEvents: SharedFlow<OtpEvent> = _otpEvents.asSharedFlow()
+
+    private val _latestOtpEvent = MutableStateFlow<OtpEvent?>(null)
+    val latestOtpEvent: StateFlow<OtpEvent?> = _latestOtpEvent.asStateFlow()
 
     init {
         scope.launch {
@@ -42,13 +48,28 @@ class OtpManager @Inject constructor(
      * 外部（NotificationListener 等）から OTP を通知する。
      */
     fun onOtpDetected(code: String, source: OtpSource) {
-        _otpEvents.tryEmit(
-            OtpEvent(
-                code = code,
-                source = source,
-                timestamp = System.currentTimeMillis()
-            )
+        val event = OtpEvent(
+            code = code,
+            source = source,
+            timestamp = System.currentTimeMillis()
         )
+        _latestOtpEvent.value = event
+        _otpEvents.tryEmit(event)
+    }
+
+    fun getRecentOtp(
+        allowedSources: Set<OtpSource>,
+        maxAgeMs: Long,
+        now: Long = System.currentTimeMillis()
+    ): OtpEvent? {
+        val event = _latestOtpEvent.value ?: return null
+        if (event.source !in allowedSources) {
+            return null
+        }
+        if (now - event.timestamp > maxAgeMs) {
+            return null
+        }
+        return event
     }
 
     /**
