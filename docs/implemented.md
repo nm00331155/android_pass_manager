@@ -139,6 +139,7 @@
 - Autofill 候補 UI の視認性改善
 - native app の save で `android` のような framework package が保存されにくいよう metadata 解決を共通化
 - 既存 credential が汎用 package / service 名のままでも、認証後学習と次回 save で実アプリ情報へ更新しやすいよう補強
+- `webDomain` を持たない native app ログインでは response-level authentication を避け、dataset-auth を使って認証後入力の反映率を優先
 
 ### 6.5 OTP フローの改善
 - recent OTP の即時利用

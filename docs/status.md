@@ -32,9 +32,11 @@
 ## 本セッションで完了した作業
 - ネイティブアプリ Autofill の汎用 save / fill / update ロジックを追加し、`android` のような弱い app 識別子に依存しない経路へ補強
   - 調査結果: `SecureVaultAutofillService.kt` の save 抽出は `node.idPackage` 由来の framework package を拾うことがあり、McDonald's のような native app 保存で `serviceName=android` になり得た。また候補 UI は `focusedId` で表示されても、`AutofillAuthActivity.kt` にはフォーカス欄 fallback がなく、明示的な username/password id が欠ける画面では認証後に実入力されない経路があった
+  - 追加調査: 2026-03-11 22:39 の McDonald's ログイン失敗では、`dumpsys autofill` 上で `AUTH_STATUS=AUTHENTICATED` かつ `FillResponse` に username/password の fieldValues が載っていた一方、session は `STATE_ACTIVE` のまま `currentValue=0_chars` で、native app + `webDomain=null` の response-level authentication が反映されていないことを確認
   - 改修: `NativeAppMetadataResolver.kt` を新規追加し、`activityComponent` と観測 package 群から framework / generic package を除外して対象 app package を推定、app label 優先で `serviceName` を解決する共通ルールを実装
   - 改修: `SecureVaultAutofillService.kt` の `onSaveRequest` を更新し、username と package / domain / service 一致スコアで既存 credential を探索して update-save できるよう変更。保存時は `android` のような generic package を避け、app label を優先して service 名を組み立てるよう修正
   - 改修: `SecureVaultAutofillService.kt` と `AutofillAuthActivity.kt` を更新し、`focusedAutofillId` と username/password hint を認証 Activity へ渡し、native app で明示的な field id が不足していても認証後にフォーカス中フィールドへ入力できる fallback を追加
+  - 改修: `SecureVaultAutofillService.kt` の `shouldUseResponseAuthentication()` を更新し、`webDomain` を持たない native app セッションでは dataset-auth を強制するよう変更。McDonald's で失敗していた response-auth 経路を回避
   - 改修: `AutofillAuthActivity.kt` の認証後学習を強化し、既存 credential の package / service 名が generic な場合は実アプリ情報へ置換しやすいよう改善
   - テスト: `NativeAppMetadataResolverTest.kt` を追加し、activity package 優先、generic package 除外、app label 優先 service 名、generic metadata 置換判定を固定
   - 検証: `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug` 成功

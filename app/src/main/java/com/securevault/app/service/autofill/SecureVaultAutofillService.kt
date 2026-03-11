@@ -719,6 +719,13 @@ class SecureVaultAutofillService : AutofillService() {
         if (!credential.hasPassword) {
             return false
         }
+        if (targets.webDomain.isNullOrBlank()) {
+            logger.d(
+                TAG,
+                "shouldUseResponseAuthentication: disabled for native app / no web domain package=$targetPackageName"
+            )
+            return false
+        }
         if (targetPackageName in CHROMIUM_BROWSER_PACKAGES) {
             logger.d(
                 TAG,
