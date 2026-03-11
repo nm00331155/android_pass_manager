@@ -1,6 +1,6 @@
 # SecureVault 実装済み一覧
 
-最終更新: 2026-03-10 22:50:06 +09:00
+最終更新: 2026-03-11 21:58:55 +09:00
 
 ## 1. この文書の位置づけ
 - `docs` 配下の旧仕様書、旧フェーズプロンプト、旧バグ修正指示書、旧作業ログを、現在の実装状態だけに整理し直した統合版です。
@@ -62,6 +62,9 @@
 - multi-step ログイン画面の複数 `FillContext` 集約
 - Chromium 系ブラウザでの dataset-auth 優先化
 - compat-mode proxy `focusedId` を考慮した候補表示
+- ネイティブアプリ保存時に `activityComponent` と観測 package 群から framework `android` などの汎用値を除外して対象アプリ package を推定
+- ネイティブアプリ保存時に app label 優先で `serviceName` を決定し、username と package / domain / service 一致スコアで既存 credential を更新保存する upsert 補強
+- フォーカス中の入力欄ヒントを `AutofillAuthActivity` へ引き継ぎ、明示的な username / password id が欠ける native app でも認証後入力を継続
 - Android 14+ Fill Dialog / dialog presentation 対応
 - 汎用フォールバック一覧を廃止した高信頼一致スコアリング
 
@@ -102,6 +105,7 @@
 - `PasskeyWebAuthnHelperTest`
 - `BackupCryptoTest`, `BackupManagerTest`, `CsvImportParserTest`, `PasswordStrengthCheckerTest`
 - `SmartFieldDetectorTest`
+- `NativeAppMetadataResolverTest`
 - `OtpListeningPolicyTest`, `OtpManagerTest`
 - `:app:testDebugUnitTest`, `:app:assembleDebug`, `:app:assembleRelease` の通過実績
 
@@ -133,6 +137,8 @@
 - Chromium compat proxy で dataset 候補を返す経路では、候補 UI を優先して `SaveInfo` の同時付与を再抑止
 - 候補抑制時に filled / missing 状態がログで追える詳細化
 - Autofill 候補 UI の視認性改善
+- native app の save で `android` のような framework package が保存されにくいよう metadata 解決を共通化
+- 既存 credential が汎用 package / service 名のままでも、認証後学習と次回 save で実アプリ情報へ更新しやすいよう補強
 
 ### 6.5 OTP フローの改善
 - recent OTP の即時利用
@@ -162,6 +168,9 @@
 - `install_debug.bat` / `install_debug_auto.bat` による実機反映実績があります。
 - 2026-03-10 時点で `KeyPassCredentialProviderService` が OS の credential provider service 一覧に列挙されることを確認済みです。
 - 2026-03-10 22:50 採取の `docs/securevault_post_patch_20260310_2250.xml` で、Samsung 認証 UI のタイトル `KeyPass`、subtitle `生体認証または端末認証でロックを解除してください`、`button_use_credential=PINを使用` を確認済みです。
+- 2026-03-11 21:57 時点で `:app:testDebugUnitTest :app:assembleDebug` 成功、ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-11 21:57:20 +09:00`、`Length=111063069`）しました。
+- 2026-03-11 21:58 に端末 `RFCY2094T0V` へ `adb install -r` 成功、`versionName=0.1.0`、`lastUpdateTime=2026-03-11 21:58:15` を確認しました。
+- 2026-03-11 21:58 採取の `docs/screenshots/securevault_native_autofill_20260311_215818.png` と `docs/securevault_native_autofill_20260311_215827.xml` で、起動直後に Samsung 生体認証 UI のタイトル `KeyPass`、subtitle `生体認証または端末認証でロックを解除してください`、`button_use_credential=PIN を使用` を確認しました。
 
 ## 8. 運用メモ
 - 一時ファイルは `D:\temp` を標準運用とします。

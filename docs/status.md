@@ -1,6 +1,6 @@
 # 作業状況
 
-最終更新: 2026-03-10 22:50:06 +09:00
+最終更新: 2026-03-11 21:58:55 +09:00
 
 ## 現在のフェーズ
 - Phase 1〜6: 全完了
@@ -30,6 +30,19 @@
 - クレジットカード有効期限の Autofill はサイト実装差（`MM/YY` / `MM/YYYY` / month-year 分離）に依存するため、実サイトごとに最終 QA が必要
 
 ## 本セッションで完了した作業
+- ネイティブアプリ Autofill の汎用 save / fill / update ロジックを追加し、`android` のような弱い app 識別子に依存しない経路へ補強
+  - 調査結果: `SecureVaultAutofillService.kt` の save 抽出は `node.idPackage` 由来の framework package を拾うことがあり、McDonald's のような native app 保存で `serviceName=android` になり得た。また候補 UI は `focusedId` で表示されても、`AutofillAuthActivity.kt` にはフォーカス欄 fallback がなく、明示的な username/password id が欠ける画面では認証後に実入力されない経路があった
+  - 改修: `NativeAppMetadataResolver.kt` を新規追加し、`activityComponent` と観測 package 群から framework / generic package を除外して対象 app package を推定、app label 優先で `serviceName` を解決する共通ルールを実装
+  - 改修: `SecureVaultAutofillService.kt` の `onSaveRequest` を更新し、username と package / domain / service 一致スコアで既存 credential を探索して update-save できるよう変更。保存時は `android` のような generic package を避け、app label を優先して service 名を組み立てるよう修正
+  - 改修: `SecureVaultAutofillService.kt` と `AutofillAuthActivity.kt` を更新し、`focusedAutofillId` と username/password hint を認証 Activity へ渡し、native app で明示的な field id が不足していても認証後にフォーカス中フィールドへ入力できる fallback を追加
+  - 改修: `AutofillAuthActivity.kt` の認証後学習を強化し、既存 credential の package / service 名が generic な場合は実アプリ情報へ置換しやすいよう改善
+  - テスト: `NativeAppMetadataResolverTest.kt` を追加し、activity package 優先、generic package 除外、app label 優先 service 名、generic metadata 置換判定を固定
+  - 検証: `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-11 21:57:20 +09:00`、`Length=111063069`）
+  - 実機反映: `adb -s RFCY2094T0V install -r .\SecureVault-debug.apk` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-11 21:58:15`
+  - UI確認: `docs/screenshots/securevault_native_autofill_20260311_215818.png` と `docs/securevault_native_autofill_20260311_215827.xml` を取得し、起動直後に Samsung 生体認証 UI の `KeyPass` タイトル、subtitle、`PIN を使用` ボタンを確認
+  - 注意: McDonald's 等の対象 native app 上で、保存名修正・認証後入力・パスワード変更時の上書き更新までを通す最終 E2E は手動 QA 継続
+
 - Amazon passkey create の origin 解決失敗と Samsung 認証 UI 経路を追加調査し、root cause 修正と実機再配備を実施
   - 調査結果: `CredProviderAuth` ログで `Failed to resolve package signature for com.amazon.mShop.android.shopping` と `Unable to resolve origin for passkey create package=com.amazon.mShop.android.shopping` を確認し、`CredentialProviderAuthActivity` の caller 署名解決が `PackageManager` 依存で package visibility に阻まれていた
   - 改修: `CredentialProviderAuthActivity.kt` で native app caller の Android facet origin を `CallingAppInfo.signingInfoCompat` から計算するよう変更し、passkey create 時の package signature 解決失敗を回避

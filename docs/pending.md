@@ -1,6 +1,6 @@
 # SecureVault 未実装・未完了一覧
 
-最終更新: 2026-03-10 22:50:06 +09:00
+最終更新: 2026-03-11 21:58:55 +09:00
 
 ## 1. この文書の位置づけ
 - `docs` 配下の旧仕様書、旧フェーズプロンプト、旧バグ修正指示書、旧作業ログから、まだ残っている未実装・未完了・未対応・要 QA 項目だけを抜き出した統合版です。
@@ -16,6 +16,9 @@
 
 ## 3. 未完了の実機 QA
 - Chrome / Brave / Edge / Firefox の実サイトで、Autofill 候補表示から認証後入力までを再確認すること
+- McDonald's など native app ログイン画面で、保存名が `android` にならず実アプリ名で保存されること、候補選択後に実際の欄へ入力されることを再確認すること
+- native app のパスワード変更フローで、既存 credential が重複追加ではなく更新保存されることを再確認すること
+- 既に `android` などの汎用 package / service 名で保存済みの credential が、認証後学習や再保存で実アプリ情報へ置換されるか確認すること
 - 実サイトで passkey get / passkey create を発火し、`KeyPass` が live chooser に出ることを確認すること
 - Amazon / ネイティブアプリ由来の passkey create で、`CallingAppInfo.signingInfoCompat` を使う修正版により登録完了まで進むか再確認すること
 - Amazon など multi-step ログインで、保存確認から最終保存まで自然に通ることを確認すること

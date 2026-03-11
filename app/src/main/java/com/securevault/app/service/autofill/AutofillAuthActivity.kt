@@ -52,6 +52,8 @@ class AutofillAuthActivity : FragmentActivity() {
         val cardExpirationMonthAutofillId = getAutofillIdExtra(EXTRA_CARD_EXPIRATION_MONTH_AUTOFILL_ID)
         val cardExpirationYearAutofillId = getAutofillIdExtra(EXTRA_CARD_EXPIRATION_YEAR_AUTOFILL_ID)
         val cardSecurityCodeAutofillId = getAutofillIdExtra(EXTRA_CARD_SECURITY_CODE_AUTOFILL_ID)
+        val focusedAutofillId = getAutofillIdExtra(EXTRA_FOCUSED_AUTOFILL_ID)
+        val focusedFillHint = intent.getStringExtra(EXTRA_FOCUSED_FILL_HINT)
         val targetPackageName = intent.getStringExtra(EXTRA_TARGET_PACKAGE_NAME).orEmpty()
         val targetWebDomain = intent.getStringExtra(EXTRA_TARGET_WEB_DOMAIN)
         val authResultMode = intent.getStringExtra(EXTRA_AUTH_RESULT_MODE) ?: AUTH_RESULT_DATASET
@@ -71,7 +73,8 @@ class AutofillAuthActivity : FragmentActivity() {
                 cardExpirationDateAutofillId = cardExpirationDateAutofillId,
                 cardExpirationMonthAutofillId = cardExpirationMonthAutofillId,
                 cardExpirationYearAutofillId = cardExpirationYearAutofillId,
-                cardSecurityCodeAutofillId = cardSecurityCodeAutofillId
+                cardSecurityCodeAutofillId = cardSecurityCodeAutofillId,
+                focusedAutofillId = focusedAutofillId
             )
         ) {
             logger.w(TAG, "Invalid intent extras for autofill auth")
@@ -95,6 +98,8 @@ class AutofillAuthActivity : FragmentActivity() {
                     cardExpirationMonthAutofillId = cardExpirationMonthAutofillId,
                     cardExpirationYearAutofillId = cardExpirationYearAutofillId,
                     cardSecurityCodeAutofillId = cardSecurityCodeAutofillId,
+                    focusedAutofillId = focusedAutofillId,
+                    focusedFillHint = focusedFillHint,
                     targetPackageName = targetPackageName,
                     targetWebDomain = targetWebDomain,
                     authResultMode = authResultMode
@@ -120,6 +125,8 @@ class AutofillAuthActivity : FragmentActivity() {
         cardExpirationMonthAutofillId: AutofillId?,
         cardExpirationYearAutofillId: AutofillId?,
         cardSecurityCodeAutofillId: AutofillId?,
+        focusedAutofillId: AutofillId?,
+        focusedFillHint: String?,
         targetPackageName: String,
         targetWebDomain: String?,
         authResultMode: String
@@ -159,15 +166,32 @@ class AutofillAuthActivity : FragmentActivity() {
                 )
             }
 
+            val shouldFillFocusedUsername =
+                focusedAutofillId != null &&
+                    focusedFillHint == FOCUSED_FILL_HINT_USERNAME &&
+                    focusedAutofillId != usernameAutofillId
+            val shouldFillFocusedPassword =
+                focusedAutofillId != null &&
+                    focusedFillHint == FOCUSED_FILL_HINT_PASSWORD &&
+                    focusedAutofillId != passwordAutofillId
+
             val dataset = datasetBuilder.apply {
                 usernameAutofillId?.let { autofillId ->
                     setValue(autofillId, AutofillValue.forText(credential.username))
                     logger.d(TAG, "Set username for autofillId=$autofillId")
                 }
+                if (shouldFillFocusedUsername) {
+                    setValue(focusedAutofillId, AutofillValue.forText(credential.username))
+                    logger.d(TAG, "Set fallback username for focusedAutofillId=$focusedAutofillId")
+                }
                 credential.password?.takeIf { it.isNotBlank() }?.let { password ->
                     passwordAutofillId?.let { autofillId ->
                         setValue(autofillId, AutofillValue.forText(password))
                         logger.d(TAG, "Set password for autofillId=$autofillId")
+                    }
+                    if (shouldFillFocusedPassword) {
+                        setValue(focusedAutofillId, AutofillValue.forText(password))
+                        logger.d(TAG, "Set fallback password for focusedAutofillId=$focusedAutofillId")
                     }
                 }
 
@@ -234,25 +258,44 @@ class AutofillAuthActivity : FragmentActivity() {
         val normalizedPackage = targetPackageName.trim()
         val normalizedWebDomain = normalizeWebDomain(targetWebDomain)
         val packageToSave = normalizedPackage.takeIf {
-            it.isNotBlank() && it !in CHROMIUM_BROWSER_PACKAGES && it != packageName
+            it.isNotBlank() &&
+                it !in CHROMIUM_BROWSER_PACKAGES &&
+                !NativeAppMetadataResolver.isGenericPackageName(it, packageName)
         }
-        val shouldUpdatePackage = credential.packageName.isNullOrBlank() && !packageToSave.isNullOrBlank()
+        val resolvedAppLabel = packageToSave?.let(::resolveApplicationLabel)
+        val resolvedServiceName = NativeAppMetadataResolver.chooseServiceName(
+            webDomain = normalizedWebDomain,
+            appLabel = resolvedAppLabel,
+            packageName = packageToSave,
+            defaultServiceName = credential.serviceName
+        )
+        val shouldUpdatePackage = NativeAppMetadataResolver.shouldReplacePackageName(
+            currentPackageName = credential.packageName,
+            candidatePackageName = packageToSave,
+            ownPackageName = packageName
+        )
         val shouldUpdateDomain = credential.serviceUrl.isNullOrBlank() && !normalizedWebDomain.isNullOrBlank()
+        val shouldUpdateServiceName = NativeAppMetadataResolver.shouldReplaceServiceName(
+            currentServiceName = credential.serviceName,
+            candidateServiceName = resolvedServiceName,
+            currentPackageName = credential.packageName ?: packageToSave
+        )
 
-        if (!shouldUpdatePackage && !shouldUpdateDomain) {
+        if (!shouldUpdatePackage && !shouldUpdateDomain && !shouldUpdateServiceName) {
             return
         }
 
         val updatedCredential = credential.copy(
-            packageName = credential.packageName ?: packageToSave,
-            serviceUrl = credential.serviceUrl ?: normalizedWebDomain
+            serviceName = if (shouldUpdateServiceName) resolvedServiceName else credential.serviceName,
+            packageName = if (shouldUpdatePackage) packageToSave else credential.packageName,
+            serviceUrl = if (shouldUpdateDomain) normalizedWebDomain else credential.serviceUrl
         )
         runCatching {
             credentialRepository.save(updatedCredential)
         }.onSuccess {
             logger.d(
                 TAG,
-                "Updated credential association id=${credential.id}, package=${updatedCredential.packageName}, domain=${updatedCredential.serviceUrl}"
+                "Updated credential association id=${credential.id}, service=${updatedCredential.serviceName}, package=${updatedCredential.packageName}, domain=${updatedCredential.serviceUrl}"
             )
         }.onFailure { throwable ->
             logger.w(TAG, "Failed to update credential association id=${credential.id}", throwable)
@@ -266,6 +309,20 @@ class AutofillAuthActivity : FragmentActivity() {
         }
         val withoutScheme = trimmed.substringAfter("://", trimmed)
         return withoutScheme.substringBefore('/').substringBefore(':').ifBlank { null }
+    }
+
+    private fun resolveApplicationLabel(packageName: String): String? {
+        return runCatching {
+            val applicationInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getApplicationInfo(packageName, android.content.pm.PackageManager.ApplicationInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getApplicationInfo(packageName, 0)
+            }
+            packageManager.getApplicationLabel(applicationInfo).toString().trim()
+        }.onFailure { throwable ->
+            logger.w(TAG, "Failed to resolve app label for package=$packageName", throwable)
+        }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private fun getAutofillIdExtra(key: String): AutofillId? {
@@ -291,7 +348,8 @@ class AutofillAuthActivity : FragmentActivity() {
         cardExpirationDateAutofillId: AutofillId?,
         cardExpirationMonthAutofillId: AutofillId?,
         cardExpirationYearAutofillId: AutofillId?,
-        cardSecurityCodeAutofillId: AutofillId?
+        cardSecurityCodeAutofillId: AutofillId?,
+        focusedAutofillId: AutofillId?
     ): Boolean {
         return usernameAutofillId != null ||
             passwordAutofillId != null ||
@@ -300,7 +358,8 @@ class AutofillAuthActivity : FragmentActivity() {
             cardExpirationDateAutofillId != null ||
             cardExpirationMonthAutofillId != null ||
             cardExpirationYearAutofillId != null ||
-            cardSecurityCodeAutofillId != null
+            cardSecurityCodeAutofillId != null ||
+            focusedAutofillId != null
     }
 
     override fun onDestroy() {
@@ -321,12 +380,16 @@ class AutofillAuthActivity : FragmentActivity() {
         const val EXTRA_CARD_EXPIRATION_MONTH_AUTOFILL_ID = "cardExpirationMonthAutofillId"
         const val EXTRA_CARD_EXPIRATION_YEAR_AUTOFILL_ID = "cardExpirationYearAutofillId"
         const val EXTRA_CARD_SECURITY_CODE_AUTOFILL_ID = "cardSecurityCodeAutofillId"
+        const val EXTRA_FOCUSED_AUTOFILL_ID = "focusedAutofillId"
+        const val EXTRA_FOCUSED_FILL_HINT = "focusedFillHint"
         const val EXTRA_TARGET_PACKAGE_NAME = "targetPackageName"
         const val EXTRA_TARGET_WEB_DOMAIN = "targetWebDomain"
         const val EXTRA_AUTH_RESULT_MODE = "authResultMode"
 
         const val AUTH_RESULT_DATASET = "dataset"
         const val AUTH_RESULT_FILL_RESPONSE = "fillResponse"
+        const val FOCUSED_FILL_HINT_USERNAME = "username"
+        const val FOCUSED_FILL_HINT_PASSWORD = "password"
 
         val CHROMIUM_BROWSER_PACKAGES = setOf(
             "com.android.chrome",

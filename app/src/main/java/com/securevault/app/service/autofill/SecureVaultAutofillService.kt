@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.assist.AssistStructure
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -168,10 +169,14 @@ class SecureVaultAutofillService : AutofillService() {
                     }
                 }
 
+                val targetAppLabel = resolveTargetApplicationLabel(
+                    activityComponent = structure.activityComponent,
+                    packageName = targetPackageName
+                )
                 val credentials = if (contentType != null) {
                     runCatching {
                         filterAutofillableCredentials(
-                            resolveCredentials(targetPackageName, targets.webDomain),
+                            resolveCredentials(targetPackageName, targets.webDomain, targetAppLabel),
                             contentType
                         ).ifEmpty {
                             if (!targets.pageTitle.isNullOrBlank()) {
@@ -273,25 +278,13 @@ class SecureVaultAutofillService : AutofillService() {
                     return@launch
                 }
 
-                val serviceName = inferServiceName(savedData.packageName, savedData.webDomain)
-                logger.d(TAG, "onSaveRequest: saving service=$serviceName")
-                credentialRepository.save(
-                    Credential(
-                        serviceName = serviceName,
-                        serviceUrl = savedData.webDomain,
-                        packageName = savedData.packageName.takeIf { it != UNKNOWN_PACKAGE },
-                        username = savedData.username.orEmpty(),
-                        password = savedData.password?.takeIf { it.isNotBlank() },
-                        category = if (savedData.credentialType == CredentialType.CARD) {
-                            DEFAULT_CARD_CATEGORY
-                        } else {
-                            DEFAULT_SAVE_CATEGORY
-                        },
-                        cardData = savedData.cardData,
-                        credentialType = savedData.credentialType
-                    )
+                val credentialToSave = buildCredentialForSave(savedData)
+                logger.d(
+                    TAG,
+                    "onSaveRequest: saving service=${credentialToSave.serviceName}, package=${credentialToSave.packageName}, updateId=${credentialToSave.id}"
                 )
-                showSaveNotification(serviceName)
+                credentialRepository.save(credentialToSave)
+                showSaveNotification(credentialToSave.serviceName)
                 logger.d(TAG, "=== onSaveRequest END (saved) ===")
 
                 withContext(Dispatchers.Main) {
@@ -799,7 +792,8 @@ class SecureVaultAutofillService : AutofillService() {
 
         val targetIds = listOfNotNull(
             targets.usernameId,
-            targets.passwordId?.takeIf { credential.hasPassword }
+            targets.passwordId?.takeIf { credential.hasPassword },
+            targets.focusedId?.takeIf { resolveFocusedFillHint(targets) != null }
         )
             .distinct()
         if (targetIds.isEmpty()) {
@@ -894,6 +888,7 @@ class SecureVaultAutofillService : AutofillService() {
                 putExtra(AutofillAuthActivity.EXTRA_TARGET_PACKAGE_NAME, targetPackageName)
                 targetWebDomain?.let { putExtra(AutofillAuthActivity.EXTRA_TARGET_WEB_DOMAIN, it) }
                 putExtra(AutofillAuthActivity.EXTRA_AUTH_RESULT_MODE, authResultMode)
+                putFocusedFillExtras(this, targets)
             }
 
             val pendingIntent = PendingIntent.getActivity(
@@ -1047,6 +1042,56 @@ class SecureVaultAutofillService : AutofillService() {
         }
     }
 
+    private fun putFocusedFillExtras(intent: Intent, targets: SmartFieldDetector.DetectedFields) {
+        val focusedId = targets.focusedId ?: return
+        val focusedFillHint = resolveFocusedFillHint(targets) ?: return
+        intent.putExtra(AutofillAuthActivity.EXTRA_FOCUSED_AUTOFILL_ID, focusedId)
+        intent.putExtra(AutofillAuthActivity.EXTRA_FOCUSED_FILL_HINT, focusedFillHint)
+    }
+
+    private fun resolveFocusedFillHint(targets: SmartFieldDetector.DetectedFields): String? {
+        val focusedId = targets.focusedId ?: return null
+        if (focusedId == targets.passwordId) {
+            return AutofillAuthActivity.FOCUSED_FILL_HINT_PASSWORD
+        }
+        if (focusedId == targets.usernameId) {
+            return AutofillAuthActivity.FOCUSED_FILL_HINT_USERNAME
+        }
+
+        val focusedNodeInfo = targets.focusedNodeInfo ?: return null
+        if (focusedNodeInfo.credentialKind != SmartFieldDetector.CredentialKind.LOGIN) {
+            return null
+        }
+
+        return if (isFocusedPasswordLike(focusedNodeInfo)) {
+            AutofillAuthActivity.FOCUSED_FILL_HINT_PASSWORD
+        } else {
+            AutofillAuthActivity.FOCUSED_FILL_HINT_USERNAME
+        }
+    }
+
+    private fun isFocusedPasswordLike(focusedNodeInfo: SmartFieldDetector.FocusedNodeInfo): Boolean {
+        val variation = focusedNodeInfo.inputType and InputType.TYPE_MASK_VARIATION
+        if (
+            variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+            variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
+            variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+            variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        ) {
+            return true
+        }
+
+        val rawTokens = buildList {
+            addAll(focusedNodeInfo.hints)
+            add(focusedNodeInfo.idEntry)
+            add(focusedNodeInfo.hintText)
+            addAll(focusedNodeInfo.htmlTokens)
+        }
+        return rawTokens.any { token ->
+            FOCUSED_PASSWORD_HINT_TOKENS.any { keyword -> token.contains(keyword) }
+        }
+    }
+
     private fun createAuthenticationPendingIntent(
         credentialId: Long,
         targets: SmartFieldDetector.DetectedFields,
@@ -1067,6 +1112,7 @@ class SecureVaultAutofillService : AutofillService() {
             putExtra(AutofillAuthActivity.EXTRA_TARGET_PACKAGE_NAME, targetPackageName)
             targetWebDomain?.let { putExtra(AutofillAuthActivity.EXTRA_TARGET_WEB_DOMAIN, it) }
             putExtra(AutofillAuthActivity.EXTRA_AUTH_RESULT_MODE, authResultMode)
+            putFocusedFillExtras(this, targets)
         }
 
         return PendingIntent.getActivity(
@@ -1227,8 +1273,10 @@ class SecureVaultAutofillService : AutofillService() {
         var cardExpirationMonth: String? = null
         var cardExpirationYear: String? = null
         var cardSecurityCode: String? = null
-        var packageName = ""
+        var capturedPackageName = ""
         var webDomain: String? = null
+        var activityComponent: ComponentName? = null
+        val observedPackageNames = mutableListOf<String>()
 
         structures.forEachIndexed { contextIndex, structure ->
             val detectedFields = smartFieldDetector.detect(structure)
@@ -1239,19 +1287,26 @@ class SecureVaultAutofillService : AutofillService() {
                 else -> detectedContentType ?: contentType
             }
 
-            if (packageName.isBlank()) {
-                packageName = structure.activityComponent?.packageName.orEmpty()
+            if (activityComponent == null) {
+                activityComponent = structure.activityComponent
+            }
+            structure.activityComponent?.packageName?.trim()?.takeIf { it.isNotBlank() }?.let {
+                observedPackageNames += it
+            }
+            if (capturedPackageName.isBlank()) {
+                capturedPackageName = structure.activityComponent?.packageName.orEmpty()
             }
             if (webDomain.isNullOrBlank()) {
                 webDomain = detectedFields.webDomain
             }
 
             fun traverse(node: AssistStructure.ViewNode) {
-                if (packageName.isBlank()) {
-                    val packageFromNode = node.idPackage?.trim().orEmpty()
-                    if (packageFromNode.isNotBlank()) {
-                        packageName = packageFromNode
-                    }
+                val packageFromNode = node.idPackage?.trim().orEmpty()
+                if (packageFromNode.isNotBlank()) {
+                    observedPackageNames += packageFromNode
+                }
+                if (capturedPackageName.isBlank() && packageFromNode.isNotBlank()) {
+                    capturedPackageName = packageFromNode
                 }
 
                 if (webDomain.isNullOrBlank()) {
@@ -1346,7 +1401,11 @@ class SecureVaultAutofillService : AutofillService() {
             }
         }
 
-        val resolvedPackageName = packageName.ifBlank { UNKNOWN_PACKAGE }
+        val resolvedPackageName = NativeAppMetadataResolver.chooseBestPackageName(
+            activityPackageName = activityComponent?.packageName ?: capturedPackageName,
+            observedPackages = observedPackageNames,
+            ownPackageName = packageName
+        ).orEmpty().ifBlank { UNKNOWN_PACKAGE }
         val resolvedContentType = when {
             detectedContentType != null -> detectedContentType
             !cardNumber.isNullOrBlank() -> AutofillContentType.CARD
@@ -1379,7 +1438,8 @@ class SecureVaultAutofillService : AutofillService() {
                             securityCode = cardSecurityCode?.takeIf { it.isNotBlank() }
                         ),
                         packageName = resolvedPackageName,
-                        webDomain = webDomain
+                        webDomain = normalizeWebDomain(webDomain),
+                        activityComponent = activityComponent
                     )
                 }
             }
@@ -1399,7 +1459,8 @@ class SecureVaultAutofillService : AutofillService() {
                         password = password,
                         cardData = null,
                         packageName = resolvedPackageName,
-                        webDomain = webDomain
+                        webDomain = normalizeWebDomain(webDomain),
+                        activityComponent = activityComponent
                     )
                 }
             }
@@ -1657,13 +1718,188 @@ class SecureVaultAutofillService : AutofillService() {
         }
     }
 
-    private fun inferServiceName(packageName: String, webDomain: String?): String {
-        return when {
-            !webDomain.isNullOrBlank() -> webDomain
-            packageName.contains('.') -> packageName.substringAfterLast('.')
-            packageName.isNotBlank() -> packageName
-            else -> DEFAULT_SERVICE_NAME
+    private suspend fun buildCredentialForSave(savedData: SavedCredentialData): Credential {
+        val normalizedWebDomain = normalizeWebDomain(savedData.webDomain)
+        val resolvedPackageName = savedData.packageName.takeUnless {
+            it == UNKNOWN_PACKAGE || NativeAppMetadataResolver.isGenericPackageName(it, packageName)
         }
+        val resolvedAppLabel = resolveTargetApplicationLabel(
+            activityComponent = savedData.activityComponent,
+            packageName = resolvedPackageName
+        )
+        val resolvedServiceName = inferServiceName(
+            packageName = resolvedPackageName ?: savedData.packageName,
+            webDomain = normalizedWebDomain,
+            appLabel = resolvedAppLabel
+        )
+        val existingCredential = findExistingCredentialForSave(
+            savedData = savedData,
+            resolvedPackageName = resolvedPackageName,
+            normalizedWebDomain = normalizedWebDomain,
+            resolvedServiceName = resolvedServiceName
+        )
+
+        return mergeSavedCredential(
+            existingCredential = existingCredential,
+            savedData = savedData,
+            resolvedPackageName = resolvedPackageName,
+            normalizedWebDomain = normalizedWebDomain,
+            resolvedServiceName = resolvedServiceName
+        )
+    }
+
+    private suspend fun findExistingCredentialForSave(
+        savedData: SavedCredentialData,
+        resolvedPackageName: String?,
+        normalizedWebDomain: String?,
+        resolvedServiceName: String
+    ): Credential? {
+        if (savedData.credentialType == CredentialType.CARD) {
+            return null
+        }
+
+        val normalizedUsername = normalizeCredentialIdentifier(savedData.username) ?: return null
+        val candidates = credentialRepository.getAll().first()
+            .asSequence()
+            .filter { candidate -> !candidate.isPasskey && !candidate.isCard }
+            .map { candidate ->
+                candidate to scoreExistingCredentialForSave(
+                    candidate = candidate,
+                    normalizedUsername = normalizedUsername,
+                    resolvedPackageName = resolvedPackageName,
+                    normalizedWebDomain = normalizedWebDomain,
+                    resolvedServiceName = resolvedServiceName
+                )
+            }
+            .filter { (_, score) -> score > 0 }
+            .sortedWith(
+                compareByDescending<Pair<Credential, Int>> { it.second }
+                    .thenByDescending { it.first.updatedAt }
+            )
+            .toList()
+
+        val bestMatch = candidates.firstOrNull() ?: return null
+        return when {
+            bestMatch.second >= STRONG_SAVE_MATCH_SCORE -> bestMatch.first
+            bestMatch.second >= WEAK_SAVE_MATCH_SCORE && candidates.size == 1 -> bestMatch.first
+            else -> null
+        }
+    }
+
+    private fun scoreExistingCredentialForSave(
+        candidate: Credential,
+        normalizedUsername: String,
+        resolvedPackageName: String?,
+        normalizedWebDomain: String?,
+        resolvedServiceName: String
+    ): Int {
+        if (normalizeCredentialIdentifier(candidate.username) != normalizedUsername) {
+            return 0
+        }
+
+        var score = 0
+        if (!resolvedPackageName.isNullOrBlank() && candidate.packageName == resolvedPackageName) {
+            score += 120
+        }
+
+        val candidateDomain = normalizeWebDomain(candidate.serviceUrl)
+        if (!normalizedWebDomain.isNullOrBlank() && candidateDomain == normalizedWebDomain) {
+            score += 90
+        } else if (!normalizedWebDomain.isNullOrBlank()) {
+            val targetMainDomain = extractMainDomain(normalizedWebDomain)
+            val candidateMainDomain = candidateDomain?.let(::extractMainDomain)
+            if (!targetMainDomain.isNullOrBlank() && targetMainDomain == candidateMainDomain) {
+                score += 60
+            }
+        }
+
+        if (
+            NativeAppMetadataResolver.normalizeLookupLabel(candidate.serviceName) ==
+                NativeAppMetadataResolver.normalizeLookupLabel(resolvedServiceName)
+        ) {
+            score += 50
+        }
+
+        if (
+            NativeAppMetadataResolver.isGenericPackageName(candidate.packageName, packageName) ||
+            NativeAppMetadataResolver.isWeakServiceName(candidate.serviceName, candidate.packageName)
+        ) {
+            score += WEAK_ASSOCIATION_RECOVERY_SCORE
+        }
+
+        return score
+    }
+
+    private fun mergeSavedCredential(
+        existingCredential: Credential?,
+        savedData: SavedCredentialData,
+        resolvedPackageName: String?,
+        normalizedWebDomain: String?,
+        resolvedServiceName: String
+    ): Credential {
+        val savedPassword = savedData.password?.takeIf { it.isNotBlank() }
+        if (existingCredential == null) {
+            return Credential(
+                serviceName = resolvedServiceName,
+                serviceUrl = normalizedWebDomain,
+                packageName = resolvedPackageName,
+                username = savedData.username.orEmpty(),
+                password = savedPassword,
+                category = if (savedData.credentialType == CredentialType.CARD) {
+                    DEFAULT_CARD_CATEGORY
+                } else {
+                    DEFAULT_SAVE_CATEGORY
+                },
+                cardData = savedData.cardData,
+                credentialType = if (!savedPassword.isNullOrBlank()) {
+                    CredentialType.PASSWORD
+                } else {
+                    savedData.credentialType
+                }
+            )
+        }
+
+        val packageToPersist = when {
+            NativeAppMetadataResolver.shouldReplacePackageName(
+                currentPackageName = existingCredential.packageName,
+                candidatePackageName = resolvedPackageName,
+                ownPackageName = packageName
+            ) -> resolvedPackageName
+            else -> existingCredential.packageName ?: resolvedPackageName
+        }
+        val serviceNameToPersist = when {
+            NativeAppMetadataResolver.shouldReplaceServiceName(
+                currentServiceName = existingCredential.serviceName,
+                candidateServiceName = resolvedServiceName,
+                currentPackageName = existingCredential.packageName ?: packageToPersist
+            ) -> resolvedServiceName
+            else -> existingCredential.serviceName
+        }
+        val passwordToPersist = savedPassword ?: existingCredential.password
+        val cardDataToPersist = savedData.cardData ?: existingCredential.cardData
+
+        return existingCredential.copy(
+            serviceName = serviceNameToPersist,
+            serviceUrl = normalizedWebDomain ?: existingCredential.serviceUrl,
+            packageName = packageToPersist,
+            username = savedData.username?.takeIf { it.isNotBlank() } ?: existingCredential.username,
+            password = passwordToPersist,
+            cardData = cardDataToPersist,
+            credentialType = when {
+                cardDataToPersist != null -> CredentialType.CARD
+                !passwordToPersist.isNullOrBlank() -> CredentialType.PASSWORD
+                else -> CredentialType.ID_ONLY
+            }
+        )
+    }
+
+    private fun inferServiceName(packageName: String, webDomain: String?, appLabel: String?): String {
+        return NativeAppMetadataResolver.chooseServiceName(
+            webDomain = webDomain,
+            appLabel = appLabel,
+            packageName = packageName,
+            defaultServiceName = DEFAULT_SERVICE_NAME
+        )
     }
 
     private fun normalizeWebDomain(webDomain: String?): String? {
@@ -1692,6 +1928,39 @@ class SecureVaultAutofillService : AutofillService() {
         }.onFailure { throwable ->
             logger.w(TAG, "resolveApplicationLabel: failed package=$packageName", throwable)
         }.getOrNull()
+    }
+
+    private fun resolveTargetApplicationLabel(
+        activityComponent: ComponentName?,
+        packageName: String?
+    ): String? {
+        val activityLabel = activityComponent?.let(::resolveActivityLabel)
+            ?.takeIf { !NativeAppMetadataResolver.isWeakServiceName(it, packageName) }
+        return activityLabel ?: packageName?.let(::resolveApplicationLabel)
+    }
+
+    private fun resolveActivityLabel(activityComponent: ComponentName): String? {
+        return runCatching {
+            val activityInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getActivityInfo(
+                    activityComponent,
+                    PackageManager.ComponentInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getActivityInfo(activityComponent, 0)
+            }
+            activityInfo.loadLabel(packageManager)?.toString()?.trim()
+        }.onFailure { throwable ->
+            logger.w(TAG, "resolveActivityLabel: failed component=$activityComponent", throwable)
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun normalizeCredentialIdentifier(value: String?): String? {
+        return value
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+            ?.takeIf { it.isNotBlank() }
     }
 
     private fun buildAppSearchTokens(packageName: String, appLabel: String?): List<String> {
@@ -1795,7 +2064,8 @@ class SecureVaultAutofillService : AutofillService() {
         val password: String?,
         val cardData: CardData?,
         val packageName: String,
-        val webDomain: String?
+        val webDomain: String?,
+        val activityComponent: ComponentName?
     )
 
     private data class FieldValueSnapshot(
@@ -1833,6 +2103,20 @@ class SecureVaultAutofillService : AutofillService() {
         const val BROWSER_GUIDE_NOTIFICATION_ID = 13000
         const val CARD_LABEL_DIGITS = 4
         const val RECENT_OTP_MAX_AGE_MS = 5 * 60_000L
+        const val STRONG_SAVE_MATCH_SCORE = 50
+        const val WEAK_SAVE_MATCH_SCORE = 25
+        const val WEAK_ASSOCIATION_RECOVERY_SCORE = 25
+
+        val FOCUSED_PASSWORD_HINT_TOKENS = listOf(
+            "pass",
+            "password",
+            "pwd",
+            "pin",
+            "secret",
+            "パスワード",
+            "暗証番号",
+            "パスコード"
+        )
 
         /** Autofill の対象から除外するパッケージ */
         val EXCLUDED_PACKAGES = setOf(
