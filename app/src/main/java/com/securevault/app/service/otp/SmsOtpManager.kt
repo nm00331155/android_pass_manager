@@ -7,6 +7,8 @@ import com.google.android.gms.auth.api.phone.SmsCodeAutofillClient
 import com.google.android.gms.auth.api.phone.SmsCodeRetriever
 import com.google.android.gms.auth.api.phone.SmsRetrieverStatusCodes
 import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.tasks.Task
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,6 +36,8 @@ class SmsOtpManager @Inject constructor(
 
     private val client: SmsCodeAutofillClient = SmsCodeRetriever.getAutofillClient(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Volatile
+    private var pendingResolutionException: ResolvableApiException? = null
 
     private val _otpResult = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
     val otpResult: SharedFlow<String> = _otpResult.asSharedFlow()
@@ -50,6 +54,8 @@ class SmsOtpManager @Inject constructor(
      * SMS OTP 監視を開始する。
      */
     suspend fun startListening(): SmsOtpStatus {
+        pendingResolutionException = null
+
         if (!isAvailablePlatform()) {
             return SmsOtpStatus.UNAVAILABLE
         }
@@ -78,10 +84,18 @@ class SmsOtpManager @Inject constructor(
 
         return runCatching {
             client.startSmsCodeRetriever().awaitResult()
+            Log.i(TAG, "SMS code retriever started")
             SmsOtpStatus.LISTENING
         }.getOrElse { throwable ->
             val statusCode = extractStatusCode(throwable)
             if (
+                throwable is ResolvableApiException &&
+                statusCode == CommonStatusCodes.RESOLUTION_REQUIRED
+            ) {
+                pendingResolutionException = throwable
+                Log.i(TAG, "SMS code retriever requires foreground resolution")
+                SmsOtpStatus.RESOLUTION_REQUIRED
+            } else if (
                 statusCode == SmsRetrieverStatusCodes.API_NOT_AVAILABLE ||
                 statusCode == SmsRetrieverStatusCodes.PLATFORM_NOT_SUPPORTED
             ) {
@@ -91,6 +105,12 @@ class SmsOtpManager @Inject constructor(
                 SmsOtpStatus.UNAVAILABLE
             }
         }
+    }
+
+    fun consumePendingResolution(): ResolvableApiException? {
+        val exception = pendingResolutionException
+        pendingResolutionException = null
+        return exception
     }
 
     /**
@@ -162,6 +182,7 @@ class SmsOtpManager @Inject constructor(
 enum class SmsOtpStatus {
     LISTENING,
     ALREADY_IN_PROGRESS,
+    RESOLUTION_REQUIRED,
     PERMISSION_DENIED,
     UNAVAILABLE
 }

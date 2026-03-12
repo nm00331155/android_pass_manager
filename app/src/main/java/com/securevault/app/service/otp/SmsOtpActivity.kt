@@ -3,10 +3,12 @@ package com.securevault.app.service.otp
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.service.autofill.Dataset
+import android.util.Log
 import android.view.View
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillManager
@@ -24,6 +26,7 @@ import com.securevault.app.data.store.securitySettingsDataStore
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -48,6 +51,8 @@ class SmsOtpActivity : ComponentActivity() {
     private var pendingClipboardResumeCheck = false
     private var clipboardTextBeforeMailLaunch: String? = null
     private var resultDispatched = false
+    private var smsResolutionRequested = false
+    private var otpWaitJob: Job? = null
     private lateinit var titleView: TextView
     private lateinit var messageView: TextView
     private lateinit var progressView: ProgressBar
@@ -104,7 +109,12 @@ class SmsOtpActivity : ComponentActivity() {
             finishCanceled()
         }
 
-        lifecycleScope.launch {
+        startOtpCollection()
+    }
+
+    private fun startOtpCollection() {
+        otpWaitJob?.cancel()
+        otpWaitJob = lifecycleScope.launch {
             val settings = appContext.securitySettingsDataStore.data.first()
             val smsEnabled = settings[SecuritySettingsPreferences.OTP_SMS_ENABLED_KEY]
                 ?: SecuritySettingsPreferences.DEFAULT_OTP_SMS_ENABLED
@@ -124,6 +134,7 @@ class SmsOtpActivity : ComponentActivity() {
             } else {
                 null
             }
+            Log.i(TAG, "OTP collection started smsEnabled=$smsEnabled notificationEnabled=$notificationEnabled clipboardEnabled=$clipboardEnabled smsStatus=$smsStatus")
 
             val startOutcome = OtpListeningPolicy.resolve(
                 smsEnabled = smsEnabled,
@@ -131,9 +142,23 @@ class SmsOtpActivity : ComponentActivity() {
                 clipboardEnabled = clipboardEnabled,
                 smsStatus = smsStatus
             )
+            Log.i(TAG, "OTP start outcome=$startOutcome")
+
+            if (startOutcome == OtpStartOutcome.SMS_RESOLUTION_REQUIRED) {
+                if (!smsResolutionRequested && launchSmsResolutionIfNeeded()) {
+                    smsResolutionRequested = true
+                    renderState(
+                        title = getString(R.string.otp_waiting_for_code),
+                        message = getString(R.string.otp_sms_permission_denied_message),
+                        showProgress = false
+                    )
+                    return@launch
+                }
+            }
 
             when (startOutcome) {
                 OtpStartOutcome.NO_SOURCE_ENABLED,
+                OtpStartOutcome.SMS_RESOLUTION_REQUIRED,
                 OtpStartOutcome.SMS_PERMISSION_DENIED,
                 OtpStartOutcome.SMS_UNAVAILABLE -> {
                     renderState(
@@ -170,6 +195,7 @@ class SmsOtpActivity : ComponentActivity() {
                     .filter { it.source in allowedSources }
                     .first()
             }
+            Log.i(TAG, "OTP wait completed event=${event?.source}")
 
             if (event == null) {
                 showTerminalMessageAndClose(
@@ -209,10 +235,22 @@ class SmsOtpActivity : ComponentActivity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode != REQUEST_CODE_SMS_RESOLUTION || resultDispatched) {
+            return
+        }
+
+        Log.i(TAG, "SMS resolution result=$resultCode")
+        startOtpCollection()
+    }
+
     /**
      * 受信レシーバーを確実に解除する。
      */
     override fun onDestroy() {
+        otpWaitJob?.cancel()
         if (clipboardMonitoringStarted) {
             otpManager.stopClipboardMonitoring()
             clipboardMonitoringStarted = false
@@ -250,6 +288,7 @@ class SmsOtpActivity : ComponentActivity() {
             message = getString(R.string.otp_detected, code),
             showProgress = false
         )
+        Log.i(TAG, "OTP detected source result code=$code")
         delay(RESULT_MESSAGE_VISIBLE_MS)
         returnOtpResult(code)
     }
@@ -290,8 +329,20 @@ class SmsOtpActivity : ComponentActivity() {
         if (resultDispatched) {
             return
         }
+        Log.i(TAG, "OTP flow canceled")
         setResult(RESULT_CANCELED)
         finish()
+    }
+
+    private fun launchSmsResolutionIfNeeded(): Boolean {
+        val resolution = otpManager.consumePendingSmsResolution() ?: return false
+        return try {
+            resolution.startResolutionForResult(this, REQUEST_CODE_SMS_RESOLUTION)
+            true
+        } catch (exception: IntentSender.SendIntentException) {
+            Log.w(TAG, "Failed to launch SMS resolution", exception)
+            false
+        }
     }
 
     private fun buildEmailAppIntent(): Intent? {
@@ -341,6 +392,7 @@ class SmsOtpActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "SmsOtpActivity"
+        private const val REQUEST_CODE_SMS_RESOLUTION = 2001
         private const val LISTEN_TIMEOUT_MS = 90_000L
         private const val RECENT_OTP_MAX_AGE_MS = 5 * 60_000L
         private const val RESULT_MESSAGE_VISIBLE_MS = 450L

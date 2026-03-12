@@ -42,6 +42,18 @@ class OtpListeningPolicyTest {
     }
 
     @Test
+    fun `resolve returns resolution required when sms needs foreground consent`() {
+        val result = OtpListeningPolicy.resolve(
+            smsEnabled = true,
+            notificationEnabled = true,
+            clipboardEnabled = true,
+            smsStatus = SmsOtpStatus.RESOLUTION_REQUIRED
+        )
+
+        assertEquals(OtpStartOutcome.SMS_RESOLUTION_REQUIRED, result)
+    }
+
+    @Test
     fun `resolve keeps waiting when notification can cover sms failure`() {
         val result = OtpListeningPolicy.resolve(
             smsEnabled = true,

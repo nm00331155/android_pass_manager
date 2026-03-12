@@ -161,14 +161,6 @@ class SecureVaultAutofillService : AutofillService() {
                     return@launch
                 }
 
-                if (shouldOfferOtpNow && OtpSource.SMS in allowedOtpSources) {
-                    runCatching {
-                        smsOtpManager.startListening()
-                    }.onFailure { throwable ->
-                        logger.w(TAG, "Failed to start SMS OTP listener", throwable)
-                    }
-                }
-
                 val targetAppLabel = resolveTargetApplicationLabel(
                     activityComponent = structure.activityComponent,
                     packageName = targetPackageName

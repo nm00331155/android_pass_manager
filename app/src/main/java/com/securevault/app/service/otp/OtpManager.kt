@@ -2,6 +2,7 @@ package com.securevault.app.service.otp
 
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.google.android.gms.common.api.ResolvableApiException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -77,6 +78,10 @@ class OtpManager @Inject constructor(
      */
     suspend fun startSmsListening(): SmsOtpStatus {
         return smsOtpManager.startListening()
+    }
+
+    fun consumePendingSmsResolution(): ResolvableApiException? {
+        return smsOtpManager.consumePendingResolution()
     }
 
     /**
