@@ -1,7 +1,6 @@
 package com.securevault.app.biometric
 
 import android.content.Context
-import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -55,18 +54,12 @@ class BiometricAuthManager @Inject constructor() {
         val manager = BiometricManager.from(activity)
         val strongBiometric = manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         val deviceCredential = manager.canAuthenticate(BiometricManager.Authenticators.DEVICE_CREDENTIAL)
-        val hasStrongBiometric = strongBiometric == BiometricManager.BIOMETRIC_SUCCESS
-        val hasDeviceCredential = deviceCredential == BiometricManager.BIOMETRIC_SUCCESS
 
         val authenticators = when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasStrongBiometric && hasDeviceCredential -> {
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
-            }
-            hasStrongBiometric -> {
+            strongBiometric == BiometricManager.BIOMETRIC_SUCCESS -> {
                 BiometricManager.Authenticators.BIOMETRIC_STRONG
             }
-            hasDeviceCredential -> {
+            deviceCredential == BiometricManager.BIOMETRIC_SUCCESS -> {
                 _authState.value = AuthUiState.DeviceCredentialFallback
                 onFallback()
                 BiometricManager.Authenticators.DEVICE_CREDENTIAL

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -139,10 +138,14 @@ fun HomeScreen(
                 style = MaterialTheme.typography.bodyMedium
             )
 
+            val contentModifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+
             when (val state = uiState) {
                 HomeUiState.Loading -> {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = contentModifier,
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator()
@@ -151,7 +154,7 @@ fun HomeScreen(
 
                 HomeUiState.Empty -> {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = contentModifier,
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -163,7 +166,10 @@ fun HomeScreen(
                 }
 
                 is HomeUiState.Error -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(
+                        modifier = contentModifier,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Text(
                             text = state.message,
                             color = MaterialTheme.colorScheme.error
@@ -176,20 +182,25 @@ fun HomeScreen(
 
                 HomeUiState.Success -> {
                     if (credentials.isEmpty()) {
-                        EmptyState(
-                            message = stringResource(R.string.home_filter_empty_message),
-                            actionLabel = stringResource(R.string.filter_reset),
-                            onAction = {
-                                viewModel.updateSearchQuery("")
-                                viewModel.updateCategoryFilter(null)
-                                if (showFavoritesOnly) {
-                                    viewModel.toggleFavoritesOnly()
+                        Box(
+                            modifier = contentModifier,
+                            contentAlignment = Alignment.Center
+                        ) {
+                            EmptyState(
+                                message = stringResource(R.string.home_filter_empty_message),
+                                actionLabel = stringResource(R.string.filter_reset),
+                                onAction = {
+                                    viewModel.updateSearchQuery("")
+                                    viewModel.updateCategoryFilter(null)
+                                    if (showFavoritesOnly) {
+                                        viewModel.toggleFavoritesOnly()
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     } else {
                         LazyColumn(
-                            modifier = Modifier.fillMaxHeight(),
+                            modifier = contentModifier,
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(

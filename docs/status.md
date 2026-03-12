@@ -1,6 +1,6 @@
 # 作業状況
 
-最終更新: 2026-03-11 21:58:55 +09:00
+最終更新: 2026-03-10 13:06:40 +09:00
 
 ## 現在のフェーズ
 - Phase 1〜6: 全完了
@@ -30,39 +30,95 @@
 - クレジットカード有効期限の Autofill はサイト実装差（`MM/YY` / `MM/YYYY` / month-year 分離）に依存するため、実サイトごとに最終 QA が必要
 
 ## 本セッションで完了した作業
-- ネイティブアプリ Autofill の汎用 save / fill / update ロジックを追加し、`android` のような弱い app 識別子に依存しない経路へ補強
-  - 調査結果: `SecureVaultAutofillService.kt` の save 抽出は `node.idPackage` 由来の framework package を拾うことがあり、McDonald's のような native app 保存で `serviceName=android` になり得た。また候補 UI は `focusedId` で表示されても、`AutofillAuthActivity.kt` にはフォーカス欄 fallback がなく、明示的な username/password id が欠ける画面では認証後に実入力されない経路があった
-  - 追加調査: 2026-03-11 22:39 の McDonald's ログイン失敗では、`dumpsys autofill` 上で `AUTH_STATUS=AUTHENTICATED` かつ `FillResponse` に username/password の fieldValues が載っていた一方、session は `STATE_ACTIVE` のまま `currentValue=0_chars` で、native app + `webDomain=null` の response-level authentication が反映されていないことを確認
-  - 改修: `NativeAppMetadataResolver.kt` を新規追加し、`activityComponent` と観測 package 群から framework / generic package を除外して対象 app package を推定、app label 優先で `serviceName` を解決する共通ルールを実装
-  - 改修: `SecureVaultAutofillService.kt` の `onSaveRequest` を更新し、username と package / domain / service 一致スコアで既存 credential を探索して update-save できるよう変更。保存時は `android` のような generic package を避け、app label を優先して service 名を組み立てるよう修正
-  - 改修: `SecureVaultAutofillService.kt` と `AutofillAuthActivity.kt` を更新し、`focusedAutofillId` と username/password hint を認証 Activity へ渡し、native app で明示的な field id が不足していても認証後にフォーカス中フィールドへ入力できる fallback を追加
-  - 改修: `SecureVaultAutofillService.kt` の `shouldUseResponseAuthentication()` を更新し、`webDomain` を持たない native app セッションでは dataset-auth を強制するよう変更。McDonald's で失敗していた response-auth 経路を回避
-  - 改修: `AutofillAuthActivity.kt` の認証後学習を強化し、既存 credential の package / service 名が generic な場合は実アプリ情報へ置換しやすいよう改善
-  - テスト: `NativeAppMetadataResolverTest.kt` を追加し、activity package 優先、generic package 除外、app label 優先 service 名、generic metadata 置換判定を固定
-  - 検証: `./gradlew.bat :app:testDebugUnitTest :app:assembleDebug` 成功
-  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-11 21:57:20 +09:00`、`Length=111063069`）
-  - 実機反映: `adb -s RFCY2094T0V install -r .\SecureVault-debug.apk` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-11 21:58:15`
-  - UI確認: `docs/screenshots/securevault_native_autofill_20260311_215818.png` と `docs/securevault_native_autofill_20260311_215827.xml` を取得し、起動直後に Samsung 生体認証 UI の `KeyPass` タイトル、subtitle、`PIN を使用` ボタンを確認
-  - 注意: McDonald's 等の対象 native app 上で、保存名修正・認証後入力・パスワード変更時の上書き更新までを通す最終 E2E は手動 QA 継続
+- passkey provider の追加サービス認識不良と Samsung 認証 UI の低コントラスト否定ボタンを修正
+  - 調査結果: `app/src/main/res/xml/provider.xml` の passkey capability が `android.credentials.TYPE_PUBLIC_KEY_CREDENTIAL` になっており、AndroidX Credential Provider が期待する `androidx.credentials.TYPE_PUBLIC_KEY_CREDENTIAL` と不一致だった
+  - 原因: passkey capability 文字列の誤りにより、OS 側の provider discovery で passkey provider として正しく扱われない状態になっていた
+  - 調査結果: `BiometricAuthManager.kt` は strong biometric 利用可能時でも `BIOMETRIC_STRONG or DEVICE_CREDENTIAL` を要求しており、Samsung 端末ではアプリ側で negative button を制御できないシステム UI 経路に入りやすかった
+  - 改修: `provider.xml` の passkey capability を `androidx.credentials.TYPE_PUBLIC_KEY_CREDENTIAL` に修正
+  - 改修: `BiometricAuthManager.kt` を更新し、strong biometric 利用可能時は biometric-only prompt を使い、negative button を `android.R.string.cancel` で明示するよう変更
+  - 改修: `themes.xml` の `Theme.SecureVault.Transparent` を light parent に変更し、認証 overlay で使われる primary/secondary text color と accent color を明示して低コントラスト化を抑制
+  - 静的確認: `provider.xml` / `BiometricAuthManager.kt` / `themes.xml` の IDE エラー 0 件を確認
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `SecureVault-debug.apk` と `android_pass_manager-debug.apk` を更新（`LastWriteTime=2026-03-10 13:04:11`、`Length=96772157`）
+  - 実機反映: `install_debug_auto.bat` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-10 13:05:20`
+  - 実機確認: `adb shell cmd package query-services -a android.service.credentials.CredentialProviderService` で `com.securevault.app.service.credential.KeyPassCredentialProviderService` が列挙され、OS が credential provider service を認識していることを確認
+  - UI確認: Samsung 生体認証ダンプでタイトル `KeyPass` と negative button `キャンセル` を確認し、アプリ側の見づらい `いいえ` 経路を回避できていることを確認
+  - 補足: この Samsung / API 36 実機では `Settings.ACTION_CREDENTIAL_PROVIDER` と `android.settings.AUTOFILL_SETTINGS` が resolve されず、設定画面の「追加サービス」自体は adb から直接開けなかったため、provider discoverability は package manager query で代替確認した
+  - スクリーンショット: `docs/screenshots/securevault_credential_provider_20260310_130547.png`、`docs/screenshots/securevault_autofill_settings_20260310_130640.png` を取得
 
-- Amazon passkey create の origin 解決失敗と Samsung 認証 UI 経路を追加調査し、root cause 修正と実機再配備を実施
-  - 調査結果: `CredProviderAuth` ログで `Failed to resolve package signature for com.amazon.mShop.android.shopping` と `Unable to resolve origin for passkey create package=com.amazon.mShop.android.shopping` を確認し、`CredentialProviderAuthActivity` の caller 署名解決が `PackageManager` 依存で package visibility に阻まれていた
-  - 改修: `CredentialProviderAuthActivity.kt` で native app caller の Android facet origin を `CallingAppInfo.signingInfoCompat` から計算するよう変更し、passkey create 時の package signature 解決失敗を回避
-  - 改修: `BiometricAuthManager.kt` で API 30+ かつ strong biometric / device credential の両方が利用可能な場合は `BIOMETRIC_STRONG or DEVICE_CREDENTIAL` を優先し、Samsung の低コントラスト否定ボタン経路を回避
-  - 検証: `./gradlew.bat :app:assembleDebug :app:testDebugUnitTest --stacktrace` 成功
-  - 実機反映: `adb install -r .\SecureVault-debug.apk` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-10 22:50:01`
-  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-10 22:48:47 +09:00`、`Length=111063069`）
-  - UI確認: `docs/screenshots/securevault_post_patch_20260310_2250.png` と `docs/securevault_post_patch_20260310_2250.xml` を取得し、Samsung 認証 UI が `button_negative` ではなく `button_use_credential=PINを使用` を表示することを確認
-  - 注意: Amazon の passkey create 完走は、この修正版での手動実機 QA を継続
+- OTP 表示メッセージ消失と開始判定の不整合を修正し、回帰テストを追加
+  - 調査結果: 直前修正で `Toast` ベースの OTP メッセージを外したあと、`SmsOtpActivity.kt` では待機タイトル以外の状態表示がほぼ失われ、recent OTP 利用時や検出完了時のメッセージが実質見えない状態になっていた
+  - 調査結果: `SmsOtpActivity.kt` は `otpManager.startSmsListening()` の戻り値を見ておらず、`PERMISSION_DENIED` / `UNAVAILABLE` でもそのまま待機に入るため、ソース構成次第で「待機しているが実際には取得不能」という不整合が残っていた
+  - 改修: `SmsOtpActivity.kt` に title/message/progress の状態更新処理を追加し、待機中・recent OTP 検出時・通常検出時・タイムアウト時・SMS 利用不可時の表示を一貫化
+  - 改修: `OtpListeningPolicy.kt` を追加し、SMS / 通知 / クリップボードの有効状態と `SmsOtpStatus` から「待機継続可能か / 即終了すべきか」を判定するロジックを分離
+  - 改修: `activity_sms_otp_waiting.xml` と `strings.xml` を更新し、OTP 検出・タイムアウト・利用不可の文言を追加
+  - テスト: `OtpListeningPolicyTest.kt` と `OtpManagerTest.kt` を追加し、開始判定と recent OTP キャッシュの回帰を unit test 化
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest --tests "com.securevault.app.service.otp.*"` 成功
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-10 12:19:22`、`Length=96771901`）
+  - 実機反映: `install_debug.bat` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-10 12:19:51`
+  - スクリーンショット: `docs/screenshots/securevault_otp_consistency_20260310_1219.png` を取得
 
-- Chromium compat proxy で自動入力画面が出なくなる回帰を調査し、候補 UI 優先へ再調整
-  - 調査結果: `adb logcat` の `SecureVaultAutofill` ログでは Brave で `FillResponse` 自体は生成されていた一方、`dumpsys autofill` では同時刻の request が残るのに UI latency history へ新規表示履歴が増えておらず、候補 UI が framework 側で出ていないことを確認
-  - 調査結果: 既存 docs にも記録されていた通り、Chromium compat proxy `focusedId` と hidden username/password id がずれる画面で `SaveInfo` を同時付与すると session が不安定になりやすく、今回の save 緩和でその条件を再導入していた
-  - 改修: `SecureVaultAutofillService.kt` で、login dataset を返す compat proxy 画面 (`focusedId !in allAutofillIds`) では `SaveInfo` の attach を抑止し、`password-first` 向け required id 補強と詳細ログは維持するよう変更
-  - 検証: `./gradlew.bat :app:assembleDebug :app:testDebugUnitTest --stacktrace` 成功
-  - 実機反映: `adb install -r .\SecureVault-debug.apk` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-10 21:56:03`
-  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-10 21:55:24 +09:00`、`Length=111063069`）
-  - 注意: 実サイト上で候補 UI が再度表示される最終確認は手動 QA 継続
+- Amazon アプリで SMS 自動入力実行後にフリーズしたように見える問題を修正
+  - 調査結果: `adb logcat` では `SmsOtpActivity` の前面化直後に Amazon task 側の window death が見えており、加えて `SmsOtpActivity` は `Theme.SecureVault.Transparent` かつ `setContentView()` なしで起動していたため、見た目は Amazon のままでも SecureVault 側 Activity が入力を奪う「見えない前面オーバーレイ」状態になっていた
+  - 原因: OTP 待機を隠す目的で透明 Activity にしたことで、ユーザー視点では Amazon が固まったように見える UX 退行を起こしていた
+  - 改修: `SmsOtpActivity.kt` に待機 UI を追加し、キャンセル可能な可視ダイアログを表示するよう変更
+  - 改修: `AndroidManifest.xml` で `SmsOtpActivity` の theme を透明テーマから `Theme.SecureVault.OtpWaiting` へ変更
+  - 改修: `themes.xml` に OTP 待機用ダイアログテーマを追加し、`activity_sms_otp_waiting.xml` と `bg_otp_waiting_panel.xml` を新規追加
+  - 維持: recent OTP がある場合は従来どおり `SecureVaultAutofillService.kt` 側の direct dataset で即入力し、待機 UI は recent OTP がない場合だけ使う
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-10 11:00:17`、`Length=96768593`）
+  - 実機反映: `install_debug.bat` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-10 11:00:41`
+  - スクリーンショット: `docs/screenshots/securevault_otp_freeze_fix_20260310_1101.png` を取得
+
+- OTP 自動入力の friction を下げ、Amazon 系 passkey create request 互換性を改善
+  - 調査結果: 既存 OTP 実装は OTP 候補を押したあと `SmsOtpActivity.kt` が前面に出て SMS/通知/クリップボードを待つ構造で、先に届いていた OTP は `OtpManager.kt` 側に保持されないため使い回しづらかった
+  - 調査結果: passkey create の provider 候補表示は `KeyPassCredentialProviderService.kt` が `PasskeyWebAuthnHelper.parseCreateRequest()` の成功を前提にしており、`rp.id` 欠落 request では候補自体を返さない構造だった
+  - 改修: `OtpManager.kt` に最新 OTP の保持と `getRecentOtp()` を追加し、`SmsOtpActivity.kt` は直近 5 分の OTP が残っていれば待機せず即 `Dataset` を返すよう変更
+  - 改修: `SecureVaultAutofillService.kt` を更新し、設定で許可されたソースに限って recent OTP を直接入力できる dataset を返し、直近コードがない場合のみ既存の認証付き OTP 取得フローへフォールバックするよう変更
+  - 改修: `AndroidManifest.xml` で `SmsOtpActivity` に `Theme.SecureVault.Transparent` を適用し、待機時の前面 UI を透過化
+  - 改修: `PasskeyWebAuthnHelper.kt` に create 候補表示用の軽量 parser を追加し、実登録時は `rp.id` 欠落でも `origin` から RP ID を補完できるよう変更
+  - 改修: `KeyPassCredentialProviderService.kt` は create 候補表示時に `rpLabel` ベースで entry を返すよう変更し、`CredentialProviderAuthActivity.kt` は passkey create 実行時に `origin` 付き parser を使うよう更新
+  - テスト: `PasskeyWebAuthnHelperTest.kt` に `rp.id` 欠落 request の回帰テストを追加
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-10 10:39:26`、`Length=96767073`）
+  - 実機反映: `install_debug.bat` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-10 10:39:54`
+  - スクリーンショット: `docs/screenshots/securevault_otp_passkey_20260310_1040.png` を取得
+
+- ID 欄フォーカス時に SMS OTP UI が誤表示される問題を修正
+  - 調査結果: `SmartFieldDetector.kt` の OTP 判定が広すぎ、数値 4〜8 桁入力や generic な `code` トークンだけでも OTP 候補として扱っていたため、会員番号やログイン ID のような入力欄でも `otpId` が立つことがあった
+  - 調査結果: `SecureVaultAutofillService.kt` は `otpId` が存在すると focused field がログイン欄でも SMS listener を起動し、OTP dataset を同時に返していたため、ID 欄フォーカス時に SMS 自動入力 UI が見える経路があった
+  - 改修: `SmartFieldDetector.kt` を更新し、username/password と両立する欄は OTP 扱いしないよう変更。さらに OTP キーワードから generic な `code` を外し、`one-time-code` / `verificationcode` / `authcode` など具体的な OTP 文脈を優先するよう調整
+  - 改修: 数値 4〜8 桁 fallback は、ログイン ID 系トークンを含む欄では発火しないよう変更
+  - 改修: `SecureVaultAutofillService.kt` に `shouldOfferOtpDataset()` を追加し、OTP dataset と SMS listener は OTP 欄が実際に focused のときだけ有効化するよう変更
+  - テスト: `SmartFieldDetectorTest.kt` に「会員番号の数値 ID は login 扱いで OTP にしない」「認証コード欄は引き続き OTP 扱いにする」回帰テストを追加
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest --tests "com.securevault.app.service.autofill.SmartFieldDetectorTest"` 成功
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-10 10:14:05`、`Length=96767073`）
+  - 実機反映: `install_debug.bat` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-10 10:14:32`
+  - スクリーンショット: `docs/screenshots/securevault_otp_focus_fix_20260310_1014.png` を取得
+
+- Autofill 保存確認が Amazon などの multi-step ログインで出ない問題を修正
+  - 調査結果: 現行設計は「ログインらしい入力欄が検出され、Autofill Framework 側で `SaveInfo` を付与できた場合に保存確認が出る」条件付き仕様であり、すべてのログイン画面で必ず確認を出す実装にはなっていなかった
+  - 調査結果: `SecureVaultAutofillService.kt` の `onSaveRequest()` / `extractSavedValues()` が `SaveRequest.fillContexts.lastOrNull()` の最後の画面だけを解析しており、Amazon のような ID 入力 -> 続行 -> パスワード入力の multi-step ログインでは最終画面に username が存在せず、保存候補を取りこぼす構造だった
+  - 改修: `SecureVaultAutofillService.kt` の `onSaveRequest()` を更新し、`SaveRequest.fillContexts` の全 context を対象に package/domain/username/password/card 情報を収集するよう変更
+  - 改修: `extractSavedValues()` を複数 `AssistStructure` 集約対応に変更し、前段画面で入力された username と後段画面で入力された password を同一 save request 内で合成できるよう修正
+  - 期待効果: Amazon など username/password が別画面に分かれるログインフローでも、Autofill session が継続していれば保存確認から最終保存まで到達しやすくなる
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-10 09:47:31`、`Length=96767073`）
+  - 実機反映: `install_debug.bat` 成功、端末 `RFCY2094T0V` の `lastUpdateTime=2026-03-10 09:48:00`
+  - スクリーンショット: `docs/screenshots/securevault_autofill_save_fix_20260310_0948.png` を取得
+
+- passkey get/create の WebAuthn 応答組み立て不整合を修正
+  - 調査結果: `PasskeyWebAuthnHelper.kt` が `clientDataHash` 付きの passkey create/get でも常に `clientDataJSON` を返し、しかも challenge にプレースホルダ文字列を埋めていたため、browser/native の third-party provider フローで WebAuthn 応答検証に失敗しうる状態だった
+  - 調査結果: `CredentialProviderAuthActivity.kt` は `ProviderGetCredentialRequest` の先頭 option を固定参照しており、password と passkey が同時提示される request で passkey entry 選択時に別 option を拾う可能性があった
+  - 改修: `PasskeyWebAuthnHelper.kt` を更新し、`clientDataJSON` は常に元の challenge/origin で組み立てつつ、`clientDataHash` が提供されるフローでは Android の Credential Provider サンプルに合わせて response JSON から `clientDataJSON` 自体を省略するよう変更
+  - 改修: `CredentialProviderAuthActivity.kt` を更新し、選択した credential の種別に応じて `GetPublicKeyCredentialOption` / `GetPasswordOption` を選ぶよう修正
+  - テスト: `PasskeyWebAuthnHelperTest.kt` を更新し、`clientDataJSON` に元 challenge/origin が入ること、および `clientDataHash` 付き flow では `clientDataJSON` を返さないことを回帰テスト化
+  - 検証: `./gradlew.bat --no-daemon :app:testDebugUnitTest :app:assembleDebug` 成功
+  - 成果物: ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-10 09:16:02`、`Length=96767073`）
+  - 実機反映: `install_debug.bat` は接続端末 `RFCY2094T0V` で `INSTALL_FAILED_UPDATE_INCOMPATIBLE`（既存 `com.securevault.app` と署名不一致）となり更新失敗。端末上の `lastUpdateTime` は `2026-03-09 22:42:29` のまま
+  - スクリーンショット: `docs/screenshots/securevault_passkey_fix_blocked_20260310_0918.png` を取得（更新版未導入のため、既存インストール状態の起動画面記録）
 
 - Autofill / passkey provider の回帰 ANR を調査し、サービス実行を非同期化
   - 調査結果: `adb logcat` で `Timeout executing service: ServiceRecord{...SecureVaultAutofillService}` と `ANR in com.securevault.app` を確認。`dumpsys autofill` では SecureVault 自体は既定 Autofill service のままで、登録解除やクラッシュではなく service 実行ブロックが主因と判明

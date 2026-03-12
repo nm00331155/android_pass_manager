@@ -19,6 +19,8 @@ class OtpManagerTest {
     fun setUp() {
         every { smsOtpManager.otpResult } returns smsFlow
         every { clipboardOtpDetector.detectedOtp } returns clipboardFlow
+        every { clipboardOtpDetector.getCurrentClipboardText() } returns null
+        every { clipboardOtpDetector.detectCurrentOtp() } returns null
     }
 
     @Test
@@ -65,5 +67,26 @@ class OtpManagerTest {
         )
 
         assertNull(result)
+    }
+
+    @Test
+    fun `getCurrentClipboardText delegates to detector`() {
+        every { clipboardOtpDetector.getCurrentClipboardText() } returns "135790"
+
+        val manager = OtpManager(smsOtpManager, clipboardOtpDetector)
+
+        assertEquals("135790", manager.getCurrentClipboardText())
+    }
+
+    @Test
+    fun `detectCurrentClipboardOtp updates latest event when clipboard contains otp`() {
+        every { clipboardOtpDetector.detectCurrentOtp() } returns "246810"
+
+        val manager = OtpManager(smsOtpManager, clipboardOtpDetector)
+        val result = manager.detectCurrentClipboardOtp()
+
+        assertEquals("246810", result?.code)
+        assertEquals(OtpSource.CLIPBOARD, result?.source)
+        assertEquals("246810", manager.latestOtpEvent.value?.code)
     }
 }

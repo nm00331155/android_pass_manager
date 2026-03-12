@@ -268,8 +268,7 @@ class SecureVaultAutofillService : AutofillService() {
                 )
                 if (
                     savedData == null ||
-                    (savedData.credentialType == CredentialType.CARD && savedData.cardData == null) ||
-                    (savedData.credentialType != CredentialType.CARD && savedData.username.isNullOrBlank())
+                    (savedData.credentialType == CredentialType.CARD && savedData.cardData == null)
                 ) {
                     logger.d(TAG, "onSaveRequest: no usable credential data")
                     withContext(Dispatchers.Main) {
@@ -613,7 +612,7 @@ class SecureVaultAutofillService : AutofillService() {
                     }
 
                     AutofillContentType.LOGIN -> {
-                        targets.usernameId?.let { id ->
+                        targets.usernameId?.takeIf { credential.username.isNotBlank() }?.let { id ->
                             datasetBuilder.setValue(id, null, lockedPresentation)
                             hasValue = true
                             logger.d(TAG, "buildFillResponse: prepared auth-gated username for id=$id")
@@ -926,7 +925,7 @@ class SecureVaultAutofillService : AutofillService() {
         return RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
             val prefix = if (locked) LOCKED_LABEL_PREFIX else ""
             setTextViewText(R.id.service_name, "$prefix${credential.serviceName}")
-            setTextViewText(R.id.username, credential.listSubtitle)
+            setTextViewText(R.id.username, formatCredentialPresentationSubtitle(credential))
         }
     }
 
@@ -934,7 +933,20 @@ class SecureVaultAutofillService : AutofillService() {
         return RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
             val prefix = if (locked) LOCKED_LABEL_PREFIX else ""
             setTextViewText(R.id.service_name, "$prefix${credential.serviceName}")
-            setTextViewText(R.id.username, credential.listSubtitle)
+            setTextViewText(R.id.username, formatCredentialPresentationSubtitle(credential))
+        }
+    }
+
+    private fun formatCredentialPresentationSubtitle(credential: Credential): String {
+        return when {
+            credential.isCard -> credential.listSubtitle
+            credential.credentialType == CredentialType.ID_ONLY -> {
+                getString(R.string.autofill_id_only_subtitle, credential.username)
+            }
+            credential.hasPassword && credential.username.isBlank() -> {
+                getString(R.string.autofill_password_only_subtitle)
+            }
+            else -> credential.listSubtitle
         }
     }
 
@@ -1234,11 +1246,24 @@ class SecureVaultAutofillService : AutofillService() {
         }
 
         if (isCompatProxyFocusedId(targets)) {
+            val allowCompatProxySave = when (contentType) {
+                AutofillContentType.LOGIN -> targets.passwordId != null
+                AutofillContentType.CARD -> cardTargetIds(targets).isNotEmpty()
+                null -> false
+            }
+            if (allowCompatProxySave) {
+                logger.d(
+                    TAG,
+                    "createSaveInfo: allowing compat proxy focusedId=$focusedId outside save ids for contentType=$contentType"
+                )
+                return false
+            }
+
             logger.d(
                 TAG,
-                "createSaveInfo: allowing compat proxy focusedId=$focusedId outside save ids for contentType=$contentType"
+                "createSaveInfo: skipping compat proxy focusedId=$focusedId because save targets are not strong enough for contentType=$contentType"
             )
-            return false
+            return true
         }
 
         val focusedCredentialKind = targets.focusedNodeInfo?.credentialKind
@@ -1765,7 +1790,12 @@ class SecureVaultAutofillService : AutofillService() {
             return null
         }
 
-        val normalizedUsername = normalizeCredentialIdentifier(savedData.username) ?: return null
+        val normalizedUsername = normalizeCredentialIdentifier(savedData.username)
+        val passwordOnlyUpdate = normalizedUsername == null && !savedData.password.isNullOrBlank()
+        if (normalizedUsername == null && !passwordOnlyUpdate) {
+            return null
+        }
+
         val candidates = credentialRepository.getAll().first()
             .asSequence()
             .filter { candidate -> !candidate.isPasskey && !candidate.isCard }
@@ -1775,7 +1805,8 @@ class SecureVaultAutofillService : AutofillService() {
                     normalizedUsername = normalizedUsername,
                     resolvedPackageName = resolvedPackageName,
                     normalizedWebDomain = normalizedWebDomain,
-                    resolvedServiceName = resolvedServiceName
+                    resolvedServiceName = resolvedServiceName,
+                    passwordOnlyUpdate = passwordOnlyUpdate
                 )
             }
             .filter { (_, score) -> score > 0 }
@@ -1786,6 +1817,20 @@ class SecureVaultAutofillService : AutofillService() {
             .toList()
 
         val bestMatch = candidates.firstOrNull() ?: return null
+        val hasUniqueTopScore = candidates.size == 1 || bestMatch.second > candidates[1].second
+
+        if (passwordOnlyUpdate) {
+            return if (bestMatch.second >= PASSWORD_ONLY_SAVE_MATCH_SCORE && hasUniqueTopScore) {
+                bestMatch.first
+            } else {
+                logger.d(
+                    TAG,
+                    "findExistingCredentialForSave: skip password-only update match because bestScore=${bestMatch.second}, uniqueTop=$hasUniqueTopScore, candidateCount=${candidates.size}"
+                )
+                null
+            }
+        }
+
         return when {
             bestMatch.second >= STRONG_SAVE_MATCH_SCORE -> bestMatch.first
             bestMatch.second >= WEAK_SAVE_MATCH_SCORE && candidates.size == 1 -> bestMatch.first
@@ -1795,12 +1840,17 @@ class SecureVaultAutofillService : AutofillService() {
 
     private fun scoreExistingCredentialForSave(
         candidate: Credential,
-        normalizedUsername: String,
+        normalizedUsername: String?,
         resolvedPackageName: String?,
         normalizedWebDomain: String?,
-        resolvedServiceName: String
+        resolvedServiceName: String,
+        passwordOnlyUpdate: Boolean
     ): Int {
-        if (normalizeCredentialIdentifier(candidate.username) != normalizedUsername) {
+        if (normalizedUsername != null) {
+            if (normalizeCredentialIdentifier(candidate.username) != normalizedUsername) {
+                return 0
+            }
+        } else if (!passwordOnlyUpdate || candidate.password.isNullOrBlank()) {
             return 0
         }
 
@@ -2112,6 +2162,7 @@ class SecureVaultAutofillService : AutofillService() {
         const val RECENT_OTP_MAX_AGE_MS = 5 * 60_000L
         const val STRONG_SAVE_MATCH_SCORE = 50
         const val WEAK_SAVE_MATCH_SCORE = 25
+        const val PASSWORD_ONLY_SAVE_MATCH_SCORE = 150
         const val WEAK_ASSOCIATION_RECOVERY_SCORE = 25
 
         val FOCUSED_PASSWORD_HINT_TOKENS = listOf(

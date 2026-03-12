@@ -1,6 +1,6 @@
 # SecureVault 実装済み一覧
 
-最終更新: 2026-03-11 21:58:55 +09:00
+最終更新: 2026-03-12 09:52:06 +09:00
 
 ## 1. この文書の位置づけ
 - `docs` 配下の旧仕様書、旧フェーズプロンプト、旧バグ修正指示書、旧作業ログを、現在の実装状態だけに整理し直した統合版です。
@@ -62,6 +62,8 @@
 - multi-step ログイン画面の複数 `FillContext` 集約
 - Chromium 系ブラウザでの dataset-auth 優先化
 - compat-mode proxy `focusedId` を考慮した候補表示
+- ID-only / password-only credential の候補ラベル明示
+- password-only save と既存 credential への更新保存マッチング補強
 - ネイティブアプリ保存時に `activityComponent` と観測 package 群から framework `android` などの汎用値を除外して対象アプリ package を推定
 - ネイティブアプリ保存時に app label 優先で `serviceName` を決定し、username と package / domain / service 一致スコアで既存 credential を更新保存する upsert 補強
 - フォーカス中の入力欄ヒントを `AutofillAuthActivity` へ引き継ぎ、明示的な username / password id が欠ける native app でも認証後入力を継続
@@ -74,6 +76,8 @@
 - クリップボードからの OTP 抽出
 - recent OTP キャッシュによる再利用
 - OTP 待機 UI とキャンセル導線
+- OTP 待機 UI からのメールアプリ起動導線
+- メールアプリ復帰時の clipboard 再確認による OTP 補助
 - OTP ソースの有効状態と待機可否判定の分離
 
 ### 5.6 Credential Provider / passkey
@@ -163,6 +167,13 @@
 - API 30+ で strong biometric と device credential の両方が利用可能な場合は combined authenticator を優先し、Samsung 端末で `PINを使用` ボタン付き prompt へ遷移することを確認
 - Backup 画面を含む Compose `AlertDialog` の否定ボタンを共通の高コントラストスタイルへ統一
 
+### 6.8 実使用感とアイコンの改善
+- Add/Edit、詳細、設定、パスワード生成、バックアップ画面の戻る導線を back arrow に統一
+- Home 画面で検索欄フォーカス後も上部メニューが押し出されにくいレイアウトへ調整
+- 他サービス CSV import ダイアログから SecureVault 形式の重複選択肢を除外
+- launcher / round launcher / adaptive icon と splash foreground を `asset` 配下の新アイコンへ更新
+- submit / button 系 UI で Autofill save prompt が出にくいよう trigger 判定を厳格化
+
 ## 7. 検証済み状態
 - `Phase 1〜6 完了` と `実装済み機能（最終）` は docs 上で整理済みです。
 - `:app:testDebugUnitTest` と `:app:assembleDebug` の成功実績があります。
@@ -172,6 +183,9 @@
 - 2026-03-11 21:57 時点で `:app:testDebugUnitTest :app:assembleDebug` 成功、ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-11 21:57:20 +09:00`、`Length=111063069`）しました。
 - 2026-03-11 21:58 に端末 `RFCY2094T0V` へ `adb install -r` 成功、`versionName=0.1.0`、`lastUpdateTime=2026-03-11 21:58:15` を確認しました。
 - 2026-03-11 21:58 採取の `docs/screenshots/securevault_native_autofill_20260311_215818.png` と `docs/securevault_native_autofill_20260311_215827.xml` で、起動直後に Samsung 生体認証 UI のタイトル `KeyPass`、subtitle `生体認証または端末認証でロックを解除してください`、`button_use_credential=PIN を使用` を確認しました。
+- 2026-03-12 09:48 時点で `:app:testDebugUnitTest :app:assembleDebug` 成功、ルート APK `SecureVault-debug.apk` を更新（`LastWriteTime=2026-03-12 09:49:52 +09:00`、`Length=96777372`）しました。
+- 2026-03-12 09:50 に端末 `RFCY2094T0V` へ再インストール成功。既存署名不一致のため一度 `adb uninstall com.securevault.app` を実行後、`adb install` で `versionName=0.1.0`、`lastUpdateTime=2026-03-12 09:50:30` を確認しました。
+- 2026-03-12 09:52 採取の `docs/screenshots/securevault_post_patch_20260312_095206.png` と `docs/securevault_post_patch_20260312_095206.xml` で、起動直後画面の表示崩れがないことを確認しました。
 
 ## 8. 運用メモ
 - 一時ファイルは `D:\temp` を標準運用とします。

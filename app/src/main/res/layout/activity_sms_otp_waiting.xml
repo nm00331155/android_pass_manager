@@ -33,10 +33,18 @@
         android:layout_marginTop="20dp" />
 
     <Button
-        android:id="@+id/actionCancel"
+        android:id="@+id/actionOpenMail"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
+        android:minHeight="48dp"
+        android:text="@string/otp_open_email_app" />
+
+    <Button
+        android:id="@+id/actionCancel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
         android:minHeight="48dp"
         android:text="@string/otp_waiting_cancel" />
 </LinearLayout>

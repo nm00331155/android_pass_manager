@@ -92,6 +92,22 @@ class OtpManager @Inject constructor(
     fun stopClipboardMonitoring() {
         clipboardOtpDetector.stopMonitoring()
     }
+
+    fun getCurrentClipboardText(): String? {
+        return clipboardOtpDetector.getCurrentClipboardText()
+    }
+
+    fun detectCurrentClipboardOtp(): OtpEvent? {
+        val code = clipboardOtpDetector.detectCurrentOtp() ?: return null
+        val event = OtpEvent(
+            code = code,
+            source = OtpSource.CLIPBOARD,
+            timestamp = System.currentTimeMillis()
+        )
+        _latestOtpEvent.value = event
+        _otpEvents.tryEmit(event)
+        return event
+    }
 }
 
 /**

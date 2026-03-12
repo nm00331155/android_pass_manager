@@ -528,10 +528,6 @@ class SmartFieldDetector @Inject constructor(
             return true
         }
 
-        if (hints.isNotEmpty()) {
-            return true
-        }
-
         val htmlJoined = htmlTokens.joinToString(separator = " ")
         val nodeJoined = buildString {
             append(node.idEntry?.lowercase(Locale.ROOT).orEmpty())
@@ -553,6 +549,10 @@ class SmartFieldDetector @Inject constructor(
             nodeJoined.contains("toggle")
         ) {
             return false
+        }
+
+        if (hints.isNotEmpty()) {
+            return true
         }
 
         return htmlJoined.contains("input") ||
@@ -592,7 +592,7 @@ class SmartFieldDetector @Inject constructor(
             hintText = hintText,
             htmlTokens = htmlTokens,
             isTextInputLike = textInputLike,
-            supportsAutofillTrigger = textInputLike || usernameCandidate || passwordCandidate || cardCandidate || otpCandidate,
+            supportsAutofillTrigger = usernameCandidate || passwordCandidate || cardCandidate || otpCandidate,
             credentialKind = when {
                 cardCandidate -> CredentialKind.CARD
                 usernameCandidate || passwordCandidate -> CredentialKind.LOGIN

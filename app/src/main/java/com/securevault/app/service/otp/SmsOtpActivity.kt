@@ -1,7 +1,9 @@
 package com.securevault.app.service.otp
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.service.autofill.Dataset
@@ -13,6 +15,7 @@ import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.RemoteViews
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.securevault.app.R
@@ -42,9 +45,13 @@ class SmsOtpActivity : ComponentActivity() {
 
     private var otpAutofillId: AutofillId? = null
     private var clipboardMonitoringStarted = false
+    private var pendingClipboardResumeCheck = false
+    private var clipboardTextBeforeMailLaunch: String? = null
+    private var resultDispatched = false
     private lateinit var titleView: TextView
     private lateinit var messageView: TextView
     private lateinit var progressView: ProgressBar
+    private lateinit var openMailButton: Button
     private lateinit var cancelButton: Button
 
     /**
@@ -64,12 +71,35 @@ class SmsOtpActivity : ComponentActivity() {
         titleView = findViewById(R.id.title)
         messageView = findViewById(R.id.message)
         progressView = findViewById(R.id.progress)
+        openMailButton = findViewById(R.id.actionOpenMail)
         cancelButton = findViewById(R.id.actionCancel)
         renderState(
             title = getString(R.string.otp_waiting_for_code),
             message = getString(R.string.otp_waiting_message),
             showProgress = true
         )
+        openMailButton.setOnClickListener {
+            if (!clipboardMonitoringStarted) {
+                otpManager.startClipboardMonitoring()
+                clipboardMonitoringStarted = true
+            }
+
+            val emailIntent = buildEmailAppIntent()
+            if (emailIntent == null) {
+                Toast.makeText(this, R.string.otp_open_email_app_unavailable, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            clipboardTextBeforeMailLaunch = otpManager.getCurrentClipboardText()
+            pendingClipboardResumeCheck = true
+            try {
+                startActivity(emailIntent)
+            } catch (_: ActivityNotFoundException) {
+                pendingClipboardResumeCheck = false
+                clipboardTextBeforeMailLaunch = null
+                Toast.makeText(this, R.string.otp_open_email_app_unavailable, Toast.LENGTH_SHORT).show()
+            }
+        }
         cancelButton.setOnClickListener {
             finishCanceled()
         }
@@ -95,63 +125,44 @@ class SmsOtpActivity : ComponentActivity() {
                 null
             }
 
-            when (
-                OtpListeningPolicy.resolve(
-                    smsEnabled = smsEnabled,
-                    notificationEnabled = notificationEnabled,
-                    clipboardEnabled = clipboardEnabled,
-                    smsStatus = smsStatus
-                )
-            ) {
-                OtpStartOutcome.NO_SOURCE_ENABLED -> {
-                    showTerminalMessageAndClose(
-                        title = getString(R.string.otp_unavailable_title),
-                        message = getString(R.string.otp_no_source_enabled_message)
-                    )
-                    return@launch
-                }
+            val startOutcome = OtpListeningPolicy.resolve(
+                smsEnabled = smsEnabled,
+                notificationEnabled = notificationEnabled,
+                clipboardEnabled = clipboardEnabled,
+                smsStatus = smsStatus
+            )
 
-                OtpStartOutcome.SMS_PERMISSION_DENIED -> {
-                    showTerminalMessageAndClose(
-                        title = getString(R.string.otp_unavailable_title),
-                        message = getString(R.string.otp_sms_permission_denied_message)
-                    )
-                    return@launch
-                }
-
+            when (startOutcome) {
+                OtpStartOutcome.NO_SOURCE_ENABLED,
+                OtpStartOutcome.SMS_PERMISSION_DENIED,
                 OtpStartOutcome.SMS_UNAVAILABLE -> {
-                    showTerminalMessageAndClose(
-                        title = getString(R.string.otp_unavailable_title),
-                        message = getString(R.string.otp_sms_unavailable_message)
+                    renderState(
+                        title = getString(R.string.otp_waiting_for_code),
+                        message = getString(R.string.otp_manual_assist_message),
+                        showProgress = false
                     )
-                    return@launch
                 }
 
                 OtpStartOutcome.WAIT_FOR_CODE -> Unit
             }
 
-            if (allowedSources.isEmpty()) {
-                finishCanceled()
-                return@launch
-            }
-
-            otpManager.getRecentOtp(
-                allowedSources = allowedSources,
-                maxAgeMs = RECENT_OTP_MAX_AGE_MS
-            )?.let { recentEvent ->
-                renderState(
-                    title = getString(R.string.otp_detected_title),
-                    message = getString(R.string.otp_detected, recentEvent.code),
-                    showProgress = false
-                )
-                delay(RESULT_MESSAGE_VISIBLE_MS)
-                returnOtpResult(recentEvent.code)
-                return@launch
-            }
-
             if (clipboardEnabled) {
                 otpManager.startClipboardMonitoring()
                 clipboardMonitoringStarted = true
+            }
+
+            if (allowedSources.isNotEmpty()) {
+                otpManager.getRecentOtp(
+                    allowedSources = allowedSources,
+                    maxAgeMs = RECENT_OTP_MAX_AGE_MS
+                )?.let { recentEvent ->
+                    showDetectedOtpAndReturn(recentEvent.code)
+                    return@launch
+                }
+            }
+
+            if (startOutcome != OtpStartOutcome.WAIT_FOR_CODE) {
+                return@launch
             }
 
             val event = withTimeoutOrNull(LISTEN_TIMEOUT_MS) {
@@ -168,13 +179,33 @@ class SmsOtpActivity : ComponentActivity() {
                 return@launch
             }
 
-            renderState(
-                title = getString(R.string.otp_detected_title),
-                message = getString(R.string.otp_detected, event.code),
-                showProgress = false
-            )
-            delay(RESULT_MESSAGE_VISIBLE_MS)
-            returnOtpResult(event.code)
+            showDetectedOtpAndReturn(event.code)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (!pendingClipboardResumeCheck || resultDispatched) {
+            return
+        }
+
+        if (!clipboardMonitoringStarted) {
+            return
+        }
+
+        pendingClipboardResumeCheck = false
+        val clipboardTextAfterReturn = otpManager.getCurrentClipboardText()
+        if (clipboardTextAfterReturn == clipboardTextBeforeMailLaunch) {
+            clipboardTextBeforeMailLaunch = clipboardTextAfterReturn
+            return
+        }
+
+        clipboardTextBeforeMailLaunch = clipboardTextAfterReturn
+        otpManager.detectCurrentClipboardOtp()?.let { clipboardOtp ->
+            lifecycleScope.launch {
+                showDetectedOtpAndReturn(clipboardOtp.code)
+            }
         }
     }
 
@@ -190,6 +221,11 @@ class SmsOtpActivity : ComponentActivity() {
     }
 
     private fun returnOtpResult(code: String) {
+        if (resultDispatched) {
+            return
+        }
+        resultDispatched = true
+
         val targetId = otpAutofillId ?: return finishCanceled()
 
         val dataset = Dataset.Builder(
@@ -206,6 +242,16 @@ class SmsOtpActivity : ComponentActivity() {
 
         setResult(RESULT_OK, resultIntent)
         finish()
+    }
+
+    private suspend fun showDetectedOtpAndReturn(code: String) {
+        renderState(
+            title = getString(R.string.otp_detected_title),
+            message = getString(R.string.otp_detected, code),
+            showProgress = false
+        )
+        delay(RESULT_MESSAGE_VISIBLE_MS)
+        returnOtpResult(code)
     }
 
     private fun renderState(
@@ -241,8 +287,56 @@ class SmsOtpActivity : ComponentActivity() {
     }
 
     private fun finishCanceled() {
+        if (resultDispatched) {
+            return
+        }
         setResult(RESULT_CANCELED)
         finish()
+    }
+
+    private fun buildEmailAppIntent(): Intent? {
+        val emailAppIntents = linkedMapOf<String, Intent>()
+        addEmailAppIntents(
+            emailAppIntents,
+            Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_APP_EMAIL)
+            }
+        )
+        addEmailAppIntents(
+            emailAppIntents,
+            Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
+        )
+
+        val chooserTargets = emailAppIntents.values.toList()
+        if (chooserTargets.isEmpty()) {
+            return null
+        }
+
+        return Intent.createChooser(
+            chooserTargets.first(),
+            getString(R.string.otp_open_email_app)
+        ).apply {
+            if (chooserTargets.size > 1) {
+                putExtra(Intent.EXTRA_INITIAL_INTENTS, chooserTargets.drop(1).toTypedArray())
+            }
+        }
+    }
+
+    private fun addEmailAppIntents(
+        emailAppIntents: MutableMap<String, Intent>,
+        baseIntent: Intent
+    ) {
+        packageManager.queryIntentActivities(baseIntent, 0).forEach { resolveInfo ->
+            val packageName = resolveInfo.activityInfo?.packageName ?: return@forEach
+            val className = resolveInfo.activityInfo?.name ?: return@forEach
+            if (emailAppIntents.containsKey(packageName)) {
+                return@forEach
+            }
+
+            emailAppIntents[packageName] = Intent(baseIntent).apply {
+                setClassName(packageName, className)
+            }
+        }
     }
 
     companion object {

@@ -21,6 +21,8 @@
     <string name="autofill_save_channel_description">自動入力で認証情報を保存したときに表示される通知です。</string>
     <string name="autofill_save_notification_title">認証情報を保存しました</string>
     <string name="autofill_save_notification_message">%1$s を KeyPass に保存しました</string>
+    <string name="autofill_id_only_subtitle">IDのみ登録: %1$s</string>
+    <string name="autofill_password_only_subtitle">パスワードのみ登録</string>
 
     <!-- ホーム画面 -->
     <string name="home_title">認証情報一覧</string>
@@ -162,8 +164,11 @@
     <!-- OTP -->
     <string name="otp_sms_suggestion">SMS から認証コードを自動入力</string>
     <string name="otp_waiting_for_code">認証コードを待機しています</string>
-    <string name="otp_waiting_message">届いた認証コードを自動で取得しています。待機をやめる場合はキャンセルしてください。</string>
+    <string name="otp_waiting_message">届いた認証コードを自動で取得しています。メールで受け取った場合はメールアプリを開いてコードをコピーし、この画面に戻ると検出します。待機をやめる場合はキャンセルしてください。</string>
     <string name="otp_waiting_cancel">待機を中止</string>
+    <string name="otp_open_email_app">メールアプリを開く</string>
+    <string name="otp_open_email_app_unavailable">メールアプリを開けませんでした。</string>
+    <string name="otp_manual_assist_message">自動取得を開始できませんでした。メールアプリを開いて認証コードをコピーし、この画面に戻ってください。</string>
     <string name="otp_detected_title">認証コードを検出しました</string>
     <string name="otp_timeout_title">認証コードを取得できませんでした</string>
     <string name="otp_timeout_message">時間をおいてもう一度お試しください。</string>

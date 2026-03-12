@@ -34,12 +34,7 @@ class ClipboardOtpDetector @Inject constructor(
         }
 
         val newListener = ClipboardManager.OnPrimaryClipChangedListener {
-            val clip = clipboardManager.primaryClip ?: return@OnPrimaryClipChangedListener
-            val text = clip.getItemAt(0)?.text?.toString() ?: return@OnPrimaryClipChangedListener
-            val otp = extractOtp(text)
-            if (otp != null) {
-                _detectedOtp.tryEmit(otp)
-            }
+            emitCurrentOtpIfPresent()
         }
 
         listener = newListener
@@ -53,6 +48,26 @@ class ClipboardOtpDetector @Inject constructor(
         val currentListener = listener ?: return
         clipboardManager.removePrimaryClipChangedListener(currentListener)
         listener = null
+    }
+
+    fun getCurrentClipboardText(): String? {
+        return readClipboardText()
+    }
+
+    fun detectCurrentOtp(): String? {
+        val text = readClipboardText() ?: return null
+        return extractOtp(text)
+    }
+
+    private fun emitCurrentOtpIfPresent(): String? {
+        val otp = detectCurrentOtp() ?: return null
+        _detectedOtp.tryEmit(otp)
+        return otp
+    }
+
+    private fun readClipboardText(): String? {
+        val clip = clipboardManager.primaryClip ?: return null
+        return clip.getItemAt(0)?.text?.toString()
     }
 
     private fun extractOtp(text: String): String? {

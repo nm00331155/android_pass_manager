@@ -1,6 +1,6 @@
 # SecureVault 未実装・未完了一覧
 
-最終更新: 2026-03-11 21:58:55 +09:00
+最終更新: 2026-03-12 09:52:06 +09:00
 
 ## 1. この文書の位置づけ
 - `docs` 配下の旧仕様書、旧フェーズプロンプト、旧バグ修正指示書、旧作業ログから、まだ残っている未実装・未完了・未対応・要 QA 項目だけを抜き出した統合版です。
@@ -22,14 +22,18 @@
 - 実サイトで passkey get / passkey create を発火し、`KeyPass` が live chooser に出ることを確認すること
 - Amazon / ネイティブアプリ由来の passkey create で、`CallingAppInfo.signingInfoCompat` を使う修正版により登録完了まで進むか再確認すること
 - Amazon など multi-step ログインで、保存確認から最終保存まで自然に通ることを確認すること
+- ID-only / password-only credential で、候補ラベル表示と実際の autofill / save / update が native app と browser の両方で自然に動くか再確認すること
+- submit / 評価 / 汎用ボタンで save prompt が再発しないことを主要サイトで確認すること
 - クレジットカード Autofill を主要サイトで確認し、特に有効期限形式 `MM/YY` / `MM/YYYY` / month-year 分離の差分を確認すること
 - バックアップ / 復元 / SecureVault CSV / 他サービス CSV / 重複戦略の端末 E2E を確認すること
 - Brave / Bitwarden CSV を使った他サービスインポートの手動 E2E を確認すること
 - 生体認証通過後のカード作成画面、設定画面、バックアップ画面、実サイト Autofill 画面の目視確認を完了すること
 - OTP の SMS / 通知 / クリップボード各経路を、実機条件ごとに再確認すること
+- OTP の「メールアプリを開く → コードをコピー → SecureVault に戻る」補助導線を実機 E2E で確認すること
 - response-auth / dataset-auth の切り替えが、対象ブラウザで二度選択や未入力を再発しないか確認すること
 - Inline Suggestions が無効な端末、`Max visible datasets = 0` の端末で Fill Dialog 表示が安定するか確認すること
 - Samsung の combined authenticator prompt で `button_negative` が再び出ず、`PINを使用` 経路が継続するか目視確認すること
+- launcher / round icon / splash icon が Samsung launcher を含む実機表示面で意図通り反映されるか確認すること
 
 ## 4. 未完了の端末差分確認
 - Samsung / API 36 実機では `Settings.ACTION_CREDENTIAL_PROVIDER` と `android.settings.AUTOFILL_SETTINGS` が adb から直接 resolve されない場合があり、設定画面の「追加サービス」を手元操作で最終確認する必要があります
