@@ -41,6 +41,7 @@ import com.securevault.app.service.otp.OtpSource
 import com.securevault.app.service.otp.SmsOtpActivity
 import com.securevault.app.service.otp.SmsOtpManager
 import com.securevault.app.util.AppLogger
+import com.securevault.app.util.isOtpNotificationListenerAccessGranted
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Locale
 import javax.inject.Inject
@@ -519,6 +520,7 @@ class SecureVaultAutofillService : AutofillService() {
                 targetPackageName = targetPackageName,
                 targets = targets,
                 credential = credentials.first(),
+                credentialCount = credentials.size,
                 inlineRequest = inlineRequest,
                 saveInfo = saveInfo
             )
@@ -540,7 +542,12 @@ class SecureVaultAutofillService : AutofillService() {
                 val lockedPresentation = createPresentation(credential, locked = true)
                 val dialogPresentation = createDialogPresentation(credential, locked = true)
 
-                val inlinePresentation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && inlineRequest != null) {
+                val inlinePresentation = if (
+                    shouldCreateInlineCredentialPresentation(
+                        contentType = contentType,
+                        webDomain = targets.webDomain
+                    ) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && inlineRequest != null
+                ) {
                     createInlinePresentation(
                         credential = credential,
                         inlineRequest = inlineRequest,
@@ -717,21 +724,22 @@ class SecureVaultAutofillService : AutofillService() {
             )
             return false
         }
-        if (targetPackageName in CHROMIUM_BROWSER_PACKAGES) {
+        val focusedMatchesAuthField = targets.focusedId == null ||
+            targets.focusedId == targets.usernameId ||
+            targets.focusedId == targets.passwordId ||
+            resolveFocusedFillHint(targets) != null
+
+        if (!focusedMatchesAuthField) {
             logger.d(
                 TAG,
-                "shouldUseResponseAuthentication: disabled for chromium browser package=$targetPackageName"
+                "shouldUseResponseAuthentication: disabled because focused field is not auth-mappable package=$targetPackageName"
             )
             return false
         }
 
-        val focusedMatchesDetectedField = targets.focusedId == null ||
-            targets.focusedId == targets.usernameId ||
-            targets.focusedId == targets.passwordId
-
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !shouldOfferOtp &&
-            focusedMatchesDetectedField &&
+            focusedMatchesAuthField &&
             (targets.usernameId != null || targets.passwordId != null)
     }
 
@@ -755,6 +763,10 @@ class SecureVaultAutofillService : AutofillService() {
 
     private suspend fun loadAllowedOtpSources(): Set<OtpSource> {
         val settings = applicationContext.securitySettingsDataStore.data.first()
+        val notificationEnabled = (
+            settings[SecuritySettingsPreferences.OTP_NOTIFICATION_ENABLED_KEY]
+                ?: SecuritySettingsPreferences.DEFAULT_OTP_NOTIFICATION_ENABLED
+            ) && isOtpNotificationListenerAccessGranted(applicationContext)
         return buildSet {
             if (
                 settings[SecuritySettingsPreferences.OTP_SMS_ENABLED_KEY]
@@ -762,10 +774,7 @@ class SecureVaultAutofillService : AutofillService() {
             ) {
                 add(OtpSource.SMS)
             }
-            if (
-                settings[SecuritySettingsPreferences.OTP_NOTIFICATION_ENABLED_KEY]
-                    ?: SecuritySettingsPreferences.DEFAULT_OTP_NOTIFICATION_ENABLED
-            ) {
+            if (notificationEnabled) {
                 add(OtpSource.NOTIFICATION)
             }
             if (
@@ -781,6 +790,7 @@ class SecureVaultAutofillService : AutofillService() {
         targetPackageName: String,
         targets: SmartFieldDetector.DetectedFields,
         credential: Credential,
+        credentialCount: Int,
         inlineRequest: InlineSuggestionsRequest?,
         saveInfo: SaveInfo?
     ): FillResponse? {
@@ -807,21 +817,9 @@ class SecureVaultAutofillService : AutofillService() {
                 authResultMode = AutofillAuthActivity.AUTH_RESULT_FILL_RESPONSE
             )
 
-            val menuPresentation = createPresentation(credential, locked = true)
-            val dialogPresentation = createDialogPresentation(credential, locked = true)
-            val inlinePresentation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && inlineRequest != null) {
-                createInlinePresentation(
-                    credential = credential,
-                    inlineRequest = inlineRequest,
-                    index = 0,
-                    targets = targets,
-                    targetPackageName = targetPackageName,
-                    targetWebDomain = targets.webDomain,
-                    authResultMode = AutofillAuthActivity.AUTH_RESULT_FILL_RESPONSE
-                )
-            } else {
-                null
-            }
+            val menuPresentation = createResponseAuthenticationPresentation(credentialCount)
+            val dialogPresentation = createResponseAuthenticationPresentation(credentialCount)
+            val inlinePresentation: InlinePresentation? = null
 
             val presentationsBuilder = Presentations.Builder()
                 .setMenuPresentation(menuPresentation)
@@ -848,6 +846,17 @@ class SecureVaultAutofillService : AutofillService() {
         }.onFailure { throwable ->
             logger.e(TAG, "buildFillResponse: failed to build response-level authentication", throwable)
         }.getOrNull()
+    }
+
+    private fun shouldCreateInlineCredentialPresentation(
+        contentType: AutofillContentType?,
+        webDomain: String?
+    ): Boolean {
+        if (contentType == AutofillContentType.LOGIN && !webDomain.isNullOrBlank()) {
+            logger.d(TAG, "buildFillResponse: suppressing inline credential chips for web login flow")
+            return false
+        }
+        return true
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -926,6 +935,20 @@ class SecureVaultAutofillService : AutofillService() {
             val prefix = if (locked) LOCKED_LABEL_PREFIX else ""
             setTextViewText(R.id.service_name, "$prefix${credential.serviceName}")
             setTextViewText(R.id.username, formatCredentialPresentationSubtitle(credential))
+        }
+    }
+
+    private fun createResponseAuthenticationPresentation(credentialCount: Int): RemoteViews {
+        return RemoteViews(packageName, R.layout.autofill_suggestion_item).apply {
+            setTextViewText(R.id.service_name, getString(R.string.autofill_service_name))
+            setTextViewText(
+                R.id.username,
+                if (credentialCount > 1) {
+                    getString(R.string.autofill_auth_subtitle)
+                } else {
+                    getString(R.string.autofill_locked_entry_subtitle)
+                }
+            )
         }
     }
 

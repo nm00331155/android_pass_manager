@@ -17,6 +17,7 @@
     <!-- 自動入力 -->
     <string name="autofill_auth_title">KeyPass のロックを解除</string>
     <string name="autofill_auth_subtitle">保存済みの認証情報を入力するには認証が必要です</string>
+    <string name="autofill_locked_entry_subtitle">タップして認証後に入力します</string>
     <string name="autofill_save_channel_name">自動入力の保存</string>
     <string name="autofill_save_channel_description">自動入力で認証情報を保存したときに表示される通知です。</string>
     <string name="autofill_save_notification_title">認証情報を保存しました</string>
@@ -122,6 +123,11 @@
     <string name="settings_sms_otp">SMS ワンタイム自動入力</string>
     <string name="settings_notification_otp">通知からの OTP 読取</string>
     <string name="settings_clipboard_otp">クリップボードの OTP 検出</string>
+    <string name="settings_notification_otp_access_granted">通知アクセス: 許可済み</string>
+    <string name="settings_notification_otp_access_missing">通知アクセス: 未許可。ON にすると通知アクセス設定を開きます。</string>
+    <string name="settings_notification_otp_enable_failed">通知アクセスが許可されていないため有効化できませんでした。端末側のセキュリティ制限も確認してください。</string>
+    <string name="settings_notification_otp_settings_unavailable">通知アクセス設定を開けませんでした。</string>
+    <string name="open_notification_listener_settings">通知アクセス設定を開く</string>
     <string name="settings_export_log">診断ログをエクスポート</string>
     <string name="settings_credential_provider_note">Samsung Pass などの追加プロバイダが有効な場合は、この管理画面で無効にすると KeyPass へ一元化しやすくなります。</string>
     <string name="settings_credential_provider_unavailable">この端末ではプロバイダ管理画面を開けませんでした。</string>

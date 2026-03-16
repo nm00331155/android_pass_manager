@@ -23,6 +23,7 @@ import androidx.lifecycle.lifecycleScope
 import com.securevault.app.R
 import com.securevault.app.data.store.SecuritySettingsPreferences
 import com.securevault.app.data.store.securitySettingsDataStore
+import com.securevault.app.util.isOtpNotificationListenerAccessGranted
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -118,8 +119,10 @@ class SmsOtpActivity : ComponentActivity() {
             val settings = appContext.securitySettingsDataStore.data.first()
             val smsEnabled = settings[SecuritySettingsPreferences.OTP_SMS_ENABLED_KEY]
                 ?: SecuritySettingsPreferences.DEFAULT_OTP_SMS_ENABLED
-            val notificationEnabled = settings[SecuritySettingsPreferences.OTP_NOTIFICATION_ENABLED_KEY]
-                ?: SecuritySettingsPreferences.DEFAULT_OTP_NOTIFICATION_ENABLED
+            val notificationEnabled = (
+                settings[SecuritySettingsPreferences.OTP_NOTIFICATION_ENABLED_KEY]
+                    ?: SecuritySettingsPreferences.DEFAULT_OTP_NOTIFICATION_ENABLED
+                ) && isOtpNotificationListenerAccessGranted(appContext)
             val clipboardEnabled = settings[SecuritySettingsPreferences.OTP_CLIPBOARD_ENABLED_KEY]
                 ?: SecuritySettingsPreferences.DEFAULT_OTP_CLIPBOARD_ENABLED
 

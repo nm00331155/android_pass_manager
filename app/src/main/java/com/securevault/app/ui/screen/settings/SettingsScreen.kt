@@ -32,8 +32,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -45,10 +47,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.securevault.app.BuildConfig
 import com.securevault.app.R
 import com.securevault.app.ui.component.ConfirmDialog
+import com.securevault.app.util.isOtpNotificationListenerAccessGranted
 import kotlinx.coroutines.launch
 
 /**
@@ -69,9 +75,14 @@ fun SettingsScreen(
     val otpClipboardEnabled by viewModel.otpClipboardEnabled.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var notificationListenerAccessGranted by remember {
+        mutableStateOf(isOtpNotificationListenerAccessGranted(context))
+    }
 
     var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
     var showDeleteFinalConfirm by rememberSaveable { mutableStateOf(false) }
+    var pendingNotificationListenerEnable by rememberSaveable { mutableStateOf(false) }
 
     val autoLockOptions = listOf(
         0 to stringResource(R.string.timeout_immediate),
@@ -91,6 +102,43 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         viewModel.messages.collect { message ->
             snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    LaunchedEffect(otpNotificationEnabled, notificationListenerAccessGranted) {
+        if (otpNotificationEnabled && !notificationListenerAccessGranted) {
+            viewModel.updateOtpNotificationEnabled(false)
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, otpNotificationEnabled, pendingNotificationListenerEnable) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_RESUME) {
+                return@LifecycleEventObserver
+            }
+
+            val hasNotificationAccess = isOtpNotificationListenerAccessGranted(context)
+            notificationListenerAccessGranted = hasNotificationAccess
+            if (pendingNotificationListenerEnable) {
+                pendingNotificationListenerEnable = false
+                if (hasNotificationAccess) {
+                    viewModel.updateOtpNotificationEnabled(true)
+                } else {
+                    viewModel.updateOtpNotificationEnabled(false)
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.settings_notification_otp_enable_failed)
+                        )
+                    }
+                }
+            } else if (otpNotificationEnabled && !hasNotificationAccess) {
+                viewModel.updateOtpNotificationEnabled(false)
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -150,18 +198,64 @@ fun SettingsScreen(
                 label = stringResource(R.string.settings_notification_otp),
                 checked = otpNotificationEnabled,
                 onCheckedChange = { enabled ->
-                    viewModel.updateOtpNotificationEnabled(enabled)
-                    if (enabled && !isNotificationListenerEnabled(context)) {
+                    if (!enabled) {
+                        pendingNotificationListenerEnable = false
+                        viewModel.updateOtpNotificationEnabled(false)
+                    } else if (notificationListenerAccessGranted) {
+                        viewModel.updateOtpNotificationEnabled(true)
+                    } else {
+                        pendingNotificationListenerEnable = true
                         runCatching {
                             context.startActivity(
                                 Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 }
                             )
+                        }.onFailure {
+                            pendingNotificationListenerEnable = false
+                            viewModel.updateOtpNotificationEnabled(false)
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.settings_notification_otp_settings_unavailable)
+                                )
+                            }
                         }
                     }
                 }
             )
+            Text(
+                text = if (notificationListenerAccessGranted) {
+                    stringResource(R.string.settings_notification_otp_access_granted)
+                } else {
+                    stringResource(R.string.settings_notification_otp_access_missing)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!notificationListenerAccessGranted) {
+                TextButton(
+                    onClick = {
+                        pendingNotificationListenerEnable = true
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            )
+                        }.onFailure {
+                            pendingNotificationListenerEnable = false
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.settings_notification_otp_settings_unavailable)
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = stringResource(R.string.open_notification_listener_settings))
+                }
+            }
             SettingToggleRow(
                 label = stringResource(R.string.settings_clipboard_otp),
                 checked = otpClipboardEnabled,
@@ -362,15 +456,6 @@ private fun SettingToggleRow(
     }
 }
 
-private fun isNotificationListenerEnabled(context: android.content.Context): Boolean {
-    val enabledListeners = Settings.Secure.getString(
-        context.contentResolver,
-        NOTIFICATION_LISTENER_SETTING_KEY
-    ).orEmpty()
-
-    return enabledListeners.contains(context.packageName)
-}
-
 private fun openCredentialProviderSettings(context: android.content.Context): Boolean {
     val packageUri = Uri.parse("package:${context.packageName}")
     val intents = buildList {
@@ -415,5 +500,3 @@ private fun openCredentialProviderSettings(context: android.content.Context): Bo
 
     return false
 }
-
-private const val NOTIFICATION_LISTENER_SETTING_KEY = "enabled_notification_listeners"

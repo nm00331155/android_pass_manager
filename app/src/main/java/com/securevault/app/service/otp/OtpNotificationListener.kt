@@ -7,6 +7,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.securevault.app.data.store.SecuritySettingsPreferences
 import com.securevault.app.data.store.securitySettingsDataStore
+import com.securevault.app.util.isOtpNotificationListenerAccessGranted
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -60,6 +61,10 @@ class OtpNotificationListener : NotificationListenerService() {
     }
 
     private fun isNotificationOtpEnabled(): Boolean {
+        if (!isOtpNotificationListenerAccessGranted(appContext)) {
+            return false
+        }
+
         return runCatching {
             runBlocking {
                 appContext.securitySettingsDataStore.data.first()[SecuritySettingsPreferences.OTP_NOTIFICATION_ENABLED_KEY]
